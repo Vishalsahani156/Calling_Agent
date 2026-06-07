@@ -4,7 +4,6 @@ import pino from 'pino';
 import { getBullMQConnection } from '../../config/redis';
 import { prisma } from '../../config/database';
 import { env } from '../../config/env';
-import { eventBus, AppEvents } from '../../events/event-bus';
 import { QUEUE_NAMES, type PostCallJobData } from '../queues';
 
 const logger = pino({ name: 'post-call-worker' });
@@ -186,8 +185,6 @@ async function processPostCall(job: Job<PostCallJobData>): Promise<{
       data: { status: 'completed' },
     });
   }
-
-  eventBus.emit(AppEvents.CALL_COMPLETED, { callId, status: call.status });
 
   return {
     callId,

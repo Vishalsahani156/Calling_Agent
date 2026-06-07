@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -44,6 +45,7 @@ export function createApp(): express.Application {
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser());
   app.use(globalRateLimit);
+  app.use('/uploads', express.static(path.resolve(env.UPLOAD_DIR)));
 
   app.use(healthRoutes);
   app.use('/api/v1/auth', authRoutes);

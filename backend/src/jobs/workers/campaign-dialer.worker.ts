@@ -4,6 +4,7 @@ import { env } from '../../config/env';
 import { getBullMQConnection } from '../../config/redis';
 import { prisma } from '../../config/database';
 import { eventBus, AppEvents } from '../../events/event-bus';
+import { scheduleCampaignContactRetry } from '../../modules/campaigns/call-retry.service';
 import {
   QUEUE_NAMES,
   enqueueCampaignDial,
@@ -108,22 +109,6 @@ async function pickNextContact(campaignId: string) {
   });
 }
 
-function parseRetryPolicy(raw: unknown): { maxAttempts: number; retryDelayMinutes: number } {
-  const fallback = { maxAttempts: 3, retryDelayMinutes: 30 };
-  if (!raw || typeof raw !== 'object') {
-    return fallback;
-  }
-
-  const policy = raw as Record<string, unknown>;
-  return {
-    maxAttempts: typeof policy.maxAttempts === 'number' ? policy.maxAttempts : fallback.maxAttempts,
-    retryDelayMinutes:
-      typeof policy.retryDelayMinutes === 'number'
-        ? policy.retryDelayMinutes
-        : fallback.retryDelayMinutes,
-  };
-}
-
 async function processDialJob(job: Job<CampaignDialerJobData>): Promise<{ action: string; callId?: string }> {
   const { campaignId, organizationId } = job.data;
 
@@ -148,8 +133,6 @@ async function processDialJob(job: Job<CampaignDialerJobData>): Promise<{ action
     logger.info({ campaignId }, 'No pending contacts; dial cycle complete');
     return { action: 'no_contacts' };
   }
-
-  const retryPolicy = parseRetryPolicy(campaign.retryPolicy);
 
   await prisma.campaignContact.update({
     where: { id: campaignContact.id },
@@ -221,31 +204,19 @@ async function processDialJob(job: Job<CampaignDialerJobData>): Promise<{ action
 
     return { action: 'dialed', callId: call.id };
   } catch (error) {
-    const attempts = campaignContact.attemptCount + 1;
-    const shouldRetry = attempts < retryPolicy.maxAttempts;
+    await prisma.call.update({
+      where: { id: call.id },
+      data: { status: 'failed', endedAt: new Date() },
+    });
 
-    await prisma.$transaction([
-      prisma.call.update({
-        where: { id: call.id },
-        data: { status: 'failed', endedAt: new Date() },
-      }),
-      prisma.campaignContact.update({
-        where: { id: campaignContact.id },
-        data: {
-          status: shouldRetry ? 'queued' : 'failed',
-          nextRetryAt: shouldRetry
-            ? new Date(Date.now() + retryPolicy.retryDelayMinutes * 60_000)
-            : null,
-        },
-      }),
-    ]);
+    await scheduleCampaignContactRetry({
+      campaignContactId: campaignContact.id,
+      campaignId,
+      organizationId,
+      reason: 'dial_failed',
+    });
 
     logger.error({ callId: call.id, err: error }, 'Exotel dial failed');
-
-    if (shouldRetry) {
-      await enqueueCampaignDial({ campaignId, organizationId }, { delay: 5_000 });
-    }
-
     throw error;
   }
 }

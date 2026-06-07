@@ -1,4 +1,4 @@
-import { CallStatus, CampaignStatus } from '@prisma/client';
+import { AnalyticsRollupGranularity, CallStatus, CampaignStatus, Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 
 export class AnalyticsRepository {
@@ -122,6 +122,72 @@ export class AnalyticsRepository {
       GROUP BY DATE_TRUNC('day', started_at)
       ORDER BY day ASC
     `;
+  }
+
+  async upsertRollup(data: {
+    organizationId: string;
+    campaignId: string | null;
+    periodStart: Date;
+    periodEnd: Date;
+    metrics: Record<string, unknown>;
+    granularity?: AnalyticsRollupGranularity;
+  }) {
+    const granularity = data.granularity ?? AnalyticsRollupGranularity.day;
+
+    const existing = await prisma.analyticsRollup.findFirst({
+      where: {
+        organizationId: data.organizationId,
+        campaignId: data.campaignId,
+        periodStart: data.periodStart,
+        granularity,
+      },
+    });
+
+    if (existing) {
+      return prisma.analyticsRollup.update({
+        where: { id: existing.id },
+        data: {
+          periodEnd: data.periodEnd,
+          metrics: data.metrics as Prisma.InputJsonValue,
+        },
+      });
+    }
+
+    return prisma.analyticsRollup.create({
+      data: {
+        organizationId: data.organizationId,
+        campaignId: data.campaignId,
+        periodStart: data.periodStart,
+        periodEnd: data.periodEnd,
+        granularity,
+        metrics: data.metrics as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  findRollup(
+    organizationId: string,
+    periodStart: Date,
+    campaignId?: string | null,
+  ) {
+    return prisma.analyticsRollup.findFirst({
+      where: {
+        organizationId,
+        campaignId: campaignId ?? null,
+        periodStart,
+        granularity: AnalyticsRollupGranularity.day,
+      },
+    });
+  }
+
+  findLatestOrganizationRollup(organizationId: string) {
+    return prisma.analyticsRollup.findFirst({
+      where: {
+        organizationId,
+        campaignId: null,
+      },
+      orderBy: { periodStart: 'desc' },
+    });
   }
 }
 

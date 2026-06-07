@@ -12,6 +12,7 @@ import {
   createRagRetriever,
   createTranscriptWriter,
 } from './call-context';
+import { callCompletionService } from '../modules/calls/call-completion.service';
 import { ConversationStore } from './conversation-store';
 import { ConversationOrchestrator } from './orchestrator/conversation-orchestrator';
 import { DtmfHandler } from './orchestrator/dtmf-handler';
@@ -27,7 +28,12 @@ const DEFAULT_GREETING = 'Hello! How can I help you today?';
 interface ActiveSession {
   orchestrator: ConversationOrchestrator;
   streamSid?: string;
+  callId?: string;
+  organizationId?: string;
 }
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const sessions = new Map<WebSocket, ActiveSession>();
 
@@ -246,7 +252,12 @@ async function handleMessage(socket: WebSocket, raw: WebSocket.RawData): Promise
       dtmfHandler: callContext?.dtmfHandler ?? null,
     });
 
-    session = { orchestrator, streamSid };
+    session = {
+      orchestrator,
+      streamSid,
+      callId: callContext?.callId,
+      organizationId: callContext?.organizationId,
+    };
     sessions.set(socket, session);
 
     await orchestrator.start();
@@ -270,6 +281,40 @@ async function handleMessage(socket: WebSocket, raw: WebSocket.RawData): Promise
   await session.orchestrator.handleFrame(frame);
 }
 
+async function finalizeCallSession(session: ActiveSession): Promise<void> {
+  if (!session.callId || !session.organizationId || !UUID_RE.test(session.callId)) {
+    return;
+  }
+
+  const call = await prisma.call.findFirst({
+    where: { id: session.callId, organizationId: session.organizationId },
+    select: { id: true, organizationId: true, status: true },
+  });
+
+  if (!call) {
+    return;
+  }
+
+  let finalStatus = call.status;
+
+  if (call.status === 'in_progress' || call.status === 'ringing') {
+    await prisma.call.update({
+      where: { id: call.id },
+      data: {
+        status: 'completed',
+        endedAt: new Date(),
+      },
+    });
+    finalStatus = 'completed';
+  }
+
+  await callCompletionService.handleCallEnded({
+    callId: call.id,
+    organizationId: call.organizationId,
+    status: finalStatus,
+  });
+}
+
 async function teardownSession(socket: WebSocket): Promise<void> {
   const session = sessions.get(socket);
   if (!session) {
@@ -278,6 +323,7 @@ async function teardownSession(socket: WebSocket): Promise<void> {
 
   sessions.delete(socket);
   await session.orchestrator.close();
+  await finalizeCallSession(session);
 }
 
 server.listen(env.VOICE_WS_PORT, () => {

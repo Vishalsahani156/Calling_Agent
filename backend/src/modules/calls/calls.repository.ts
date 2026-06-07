@@ -105,6 +105,19 @@ export class CallsRepository {
     });
   }
 
+  updateRecordingStorage(
+    callId: string,
+    data: { storageUrl: string; format: string },
+  ) {
+    return prisma.callRecording.update({
+      where: { callId },
+      data: {
+        storageUrl: data.storageUrl,
+        format: data.format,
+      },
+    });
+  }
+
   getNextTranscriptSequence(callId: string) {
     return prisma.callTranscript
       .aggregate({

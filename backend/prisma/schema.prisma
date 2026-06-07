@@ -72,6 +72,10 @@ enum CallDisposition {
   wrong_number
 }
 
+enum AnalyticsRollupGranularity {
+  day
+}
+
 enum TranscriptSpeaker {
   agent
   user
@@ -111,9 +115,10 @@ model Organization {
   contactGroups  ContactGroup[]
   aiAgents       AiAgent[]
   knowledgeBases KnowledgeBase[]
-  calls          Call[]
-  auditLogs      AuditLog[]
-  orgSettings    Settings?
+  calls            Call[]
+  auditLogs        AuditLog[]
+  orgSettings      Settings?
+  analyticsRollups AnalyticsRollup[]
 
   @@map("organizations")
 }
@@ -358,12 +363,32 @@ model Campaign {
   aiAgent       AiAgent           @relation(fields: [aiAgentId], references: [id], onDelete: Restrict)
   knowledgeBase KnowledgeBase?    @relation(fields: [knowledgeBaseId], references: [id], onDelete: SetNull)
   createdBy     User              @relation("CampaignCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  contacts      CampaignContact[]
-  calls         Call[]
+  contacts         CampaignContact[]
+  calls            Call[]
+  analyticsRollups AnalyticsRollup[]
 
   @@index([organizationId, status])
   @@index([scheduleStart])
   @@map("campaigns")
+}
+
+model AnalyticsRollup {
+  id             String                     @id @default(uuid()) @db.Uuid
+  organizationId String                     @map("organization_id") @db.Uuid
+  campaignId     String?                    @map("campaign_id") @db.Uuid
+  periodStart    DateTime                   @map("period_start")
+  periodEnd      DateTime                   @map("period_end")
+  granularity    AnalyticsRollupGranularity @default(day)
+  metrics        Json                       @default("{}")
+  createdAt      DateTime                   @default(now()) @map("created_at")
+  updatedAt      DateTime                   @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign     Campaign?    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, campaignId, periodStart, granularity])
+  @@index([organizationId, periodStart])
+  @@map("analytics_rollups")
 }
 
 model CampaignContact {

@@ -1,8 +1,8 @@
 import { CallStatus, Prisma } from '@prisma/client';
 import { webhooksRepository } from './webhooks.repository';
 import { NotFoundError } from '../../shared/errors/app.error';
-import { eventBus, AppEvents } from '../../events/event-bus';
-import { enqueuePostCall } from '../../jobs/queues';
+import { callCompletionService } from '../calls/call-completion.service';
+import { enqueueRecordingSync } from '../../jobs/queues';
 import { isEscalationRequested } from '../../voice/conversation-store';
 
 const TERMINAL_STATUSES: CallStatus[] = [
@@ -89,7 +89,9 @@ export class WebhooksService {
 
     const updated = await webhooksRepository.updateCallStatus(call.id, updateData);
 
+    let recordingUrl: string | undefined;
     if (typeof payload.RecordingUrl === 'string') {
+      recordingUrl = payload.RecordingUrl;
       await webhooksRepository.upsertRecording(call.id, {
         exotelRecordingUrl: payload.RecordingUrl,
         durationSeconds,
@@ -103,8 +105,13 @@ export class WebhooksService {
     );
 
     if (TERMINAL_STATUSES.includes(status)) {
-      eventBus.emit(AppEvents.CALL_COMPLETED, { callId: call.id, status });
-      await enqueuePostCall({
+      await callCompletionService.handleCallEnded({
+        callId: call.id,
+        organizationId: call.organizationId,
+        status,
+      });
+    } else if (recordingUrl) {
+      await enqueueRecordingSync({
         callId: call.id,
         organizationId: call.organizationId,
       });

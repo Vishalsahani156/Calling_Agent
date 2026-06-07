@@ -16,6 +16,7 @@ function endOfDay(date: Date): Date {
 
 export class AnalyticsService {
   async getOverview(organizationId: string) {
+    const cachedRollup = await analyticsRepository.findLatestOrganizationRollup(organizationId);
     const todayStart = startOfDay(new Date());
     const todayEnd = endOfDay(new Date());
 
@@ -53,6 +54,14 @@ export class AnalyticsService {
         completionRate,
       },
       generatedAt: new Date().toISOString(),
+      lastRollup: cachedRollup
+        ? {
+            periodStart: cachedRollup.periodStart.toISOString(),
+            periodEnd: cachedRollup.periodEnd.toISOString(),
+            metrics: cachedRollup.metrics,
+            updatedAt: cachedRollup.updatedAt.toISOString(),
+          }
+        : null,
     };
   }
 
@@ -111,6 +120,13 @@ export class AnalyticsService {
     const campaign = await analyticsRepository.findCampaign(campaignId, organizationId);
     if (!campaign) throw new NotFoundError('Campaign not found');
 
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1_000);
+    const cachedRollup = await analyticsRepository.findRollup(
+      organizationId,
+      startOfDay(yesterday),
+      campaignId,
+    );
+
     const [callStats, contactStats, durationAgg] = await Promise.all([
       analyticsRepository.groupCallsByStatus(organizationId, { campaignId }),
       analyticsRepository.groupCampaignContactsByStatus(campaignId, organizationId),
@@ -144,6 +160,14 @@ export class AnalyticsService {
         ),
       },
       generatedAt: new Date().toISOString(),
+      lastRollup: cachedRollup
+        ? {
+            periodStart: cachedRollup.periodStart.toISOString(),
+            periodEnd: cachedRollup.periodEnd.toISOString(),
+            metrics: cachedRollup.metrics,
+            updatedAt: cachedRollup.updatedAt.toISOString(),
+          }
+        : null,
     };
   }
 }
