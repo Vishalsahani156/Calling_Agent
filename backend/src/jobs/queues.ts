@@ -43,8 +43,6 @@ const DEFAULT_JOB_OPTIONS: JobsOptions = {
   },
 };
 
-const connection = getBullMQConnection();
-
 const queueInstances = new Map<QueueName, Queue>();
 
 function getOrCreateQueue(name: QueueName): Queue {
@@ -53,20 +51,17 @@ function getOrCreateQueue(name: QueueName): Queue {
     return existing;
   }
 
-  const queue = new Queue(name, { connection });
+  const queue = new Queue(name, { connection: getBullMQConnection() });
   queueInstances.set(name, queue);
   return queue;
 }
-
-export const csvImportQueue = getOrCreateQueue(QUEUE_NAMES.CSV_IMPORT);
-export const campaignDialerQueue = getOrCreateQueue(QUEUE_NAMES.CAMPAIGN_DIALER);
-export const postCallQueue = getOrCreateQueue(QUEUE_NAMES.POST_CALL);
 
 export async function enqueueCsvImport(
   data: CsvImportJobData,
   options?: JobsOptions,
 ): Promise<string> {
-  const job = await csvImportQueue.add('import', data, {
+  const queue = getOrCreateQueue(QUEUE_NAMES.CSV_IMPORT);
+  const job = await queue.add('import', data, {
     ...DEFAULT_JOB_OPTIONS,
     ...options,
   });
@@ -77,7 +72,8 @@ export async function enqueueCampaignDial(
   data: CampaignDialerJobData,
   options?: JobsOptions,
 ): Promise<string> {
-  const job = await campaignDialerQueue.add('dial', data, {
+  const queue = getOrCreateQueue(QUEUE_NAMES.CAMPAIGN_DIALER);
+  const job = await queue.add('dial', data, {
     ...DEFAULT_JOB_OPTIONS,
     ...options,
     jobId: `dial-${data.campaignId}-${Date.now()}`,
@@ -89,7 +85,8 @@ export async function enqueuePostCall(
   data: PostCallJobData,
   options?: JobsOptions,
 ): Promise<string> {
-  const job = await postCallQueue.add('process', data, {
+  const queue = getOrCreateQueue(QUEUE_NAMES.POST_CALL);
+  const job = await queue.add('process', data, {
     ...DEFAULT_JOB_OPTIONS,
     ...options,
     jobId: `post-call-${data.callId}`,

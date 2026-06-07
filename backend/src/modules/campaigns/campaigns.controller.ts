@@ -59,6 +59,7 @@ export class CampaignsController {
     const result = await campaignsService.importContacts(
       req.params.id,
       req.user!.organizationId,
+      req.user!.id,
       req.body,
     );
     sendSuccess(res, result, 202);

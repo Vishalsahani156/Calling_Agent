@@ -8,7 +8,7 @@ import {
 import { BadRequestError, ConflictError, NotFoundError } from '../../shared/errors/app.error';
 import { getPagination, buildPaginatedMeta } from '../../shared/utils/response';
 import { eventBus, AppEvents } from '../../events/event-bus';
-import { campaignDialerQueue, csvImportQueue } from '../../jobs/queues';
+import { enqueueCampaignDial, enqueueCsvImport } from '../../jobs/queues';
 
 function formatCampaign(campaign: {
   id: string;
@@ -161,11 +161,7 @@ export class CampaignsService {
 
     eventBus.emit(AppEvents.CAMPAIGN_STARTED, { campaignId: id, organizationId });
 
-    await campaignDialerQueue.add(
-      'dial-batch',
-      { campaignId: id, organizationId },
-      { jobId: `campaign-dial-${id}-${Date.now()}` },
-    );
+    await enqueueCampaignDial({ campaignId: id, organizationId });
 
     return formatCampaign(updated);
   }
@@ -210,19 +206,25 @@ export class CampaignsService {
     return formatCampaign(updated);
   }
 
-  async importContacts(id: string, organizationId: string, input: ImportContactsInput) {
+  async importContacts(
+    id: string,
+    organizationId: string,
+    importedById: string,
+    input: ImportContactsInput,
+  ) {
     const campaign = await campaignsRepository.findById(id, organizationId);
     if (!campaign) throw new NotFoundError('Campaign not found');
 
     if (input.filePath) {
-      const job = await csvImportQueue.add('import-csv', {
+      const jobId = await enqueueCsvImport({
         organizationId,
         campaignId: id,
         filePath: input.filePath,
+        importedById,
       });
       return {
         message: 'Contact import queued',
-        jobId: job.id,
+        jobId,
         campaignId: id,
       };
     }
