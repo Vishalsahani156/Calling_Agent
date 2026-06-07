@@ -106,6 +106,7 @@ flowchart TB
 
 ## Related Docs
 
+- [AI Calling Phase 4](./AI-CALLING-PHASE-4.md) — detailed Phase 4 feature spec and implementation status
 - [Backend Architecture](./ARCHITECTURE.md)
 - [Database Schema](./database/SCHEMA-REFERENCE.md)
 - [API Endpoints](./API-ENDPOINTS.md)

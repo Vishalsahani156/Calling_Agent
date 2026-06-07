@@ -99,4 +99,5 @@ flowchart LR
 - [Folder Structure](./FOLDER-STRUCTURE.md)
 - [API Endpoints](./API-ENDPOINTS.md)
 - [Voice and AI](./VOICE-AND-AI.md)
+- [AI Calling Phase 4](./AI-CALLING-PHASE-4.md)
 - [Database Schema](./database/SCHEMA-REFERENCE.md)

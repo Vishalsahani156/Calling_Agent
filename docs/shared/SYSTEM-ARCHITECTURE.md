@@ -75,7 +75,7 @@ flowchart TB
 |---|---|---|
 | Web | Next.js | [Frontend](../frontend/README.md) |
 | API | Express REST | [Backend](../backend/README.md) |
-| Voice Worker | WebSocket + AI pipeline | [Voice and AI](../backend/VOICE-AND-AI.md) |
+| Voice Worker | WebSocket + AI pipeline | [Voice and AI](../backend/VOICE-AND-AI.md), [AI Calling Phase 4](../backend/AI-CALLING-PHASE-4.md) |
 | Workers | BullMQ consumers | [Backend Architecture](../backend/ARCHITECTURE.md) |
 
 ## Deployment Architecture

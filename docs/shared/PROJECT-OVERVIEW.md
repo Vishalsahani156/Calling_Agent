@@ -35,7 +35,7 @@ The application must be scalable, maintainable, secure, and production-ready.
 | Phase 1 | Database layer (Prisma) | Complete |
 | Phase 2 | Backend API (Express) | Not started |
 | Phase 3 | Frontend dashboard (Next.js) | Not started |
-| Phase 4 | Voice worker + Exotel integration | Not started |
+| Phase 4 | Voice worker + AI calling (STT, TTS, LLM, orchestration) | In progress — see [AI-CALLING-PHASE-4.md](../backend/AI-CALLING-PHASE-4.md) |
 
 ## Documentation Map
 

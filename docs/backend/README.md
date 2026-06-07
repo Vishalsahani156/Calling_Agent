@@ -11,6 +11,7 @@ Documentation for the Express API, Prisma database, voice worker, BullMQ jobs, a
 | [API-ENDPOINTS.md](./API-ENDPOINTS.md) | REST API endpoint reference |
 | [FOLDER-STRUCTURE.md](./FOLDER-STRUCTURE.md) | Backend project folder layout |
 | [VOICE-AND-AI.md](./VOICE-AND-AI.md) | Call flows, AI conversation, knowledge base, multi-language |
+| [AI-CALLING-PHASE-4.md](./AI-CALLING-PHASE-4.md) | Phase 4: STT, TTS, LLM, agent logic, orchestration, multi-language |
 
 ## Database (Phase 1 — Complete)
 
