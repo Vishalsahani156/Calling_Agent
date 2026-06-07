@@ -22,5 +22,6 @@ export type UpdateAgentInput = {
 
 export type TestAgentInput = {
   message: string;
+  knowledgeBaseId?: string;
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
 };

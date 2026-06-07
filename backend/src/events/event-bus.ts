@@ -21,8 +21,16 @@ export interface EventPayloads {
   [AppEvents.CAMPAIGN_STARTED]: { campaignId: string; organizationId: string };
   [AppEvents.CAMPAIGN_PAUSED]: { campaignId: string; organizationId: string };
   [AppEvents.CAMPAIGN_STOPPED]: { campaignId: string; organizationId: string };
-  [AppEvents.CALL_INITIATED]: { callId: string; campaignId?: string };
-  [AppEvents.CALL_COMPLETED]: { callId: string; status: string };
+  [AppEvents.CALL_INITIATED]: {
+    callId: string;
+    organizationId: string;
+    campaignId?: string;
+  };
+  [AppEvents.CALL_COMPLETED]: {
+    callId: string;
+    organizationId: string;
+    status: string;
+  };
   [AppEvents.CONTACT_IMPORTED]: { organizationId: string; count: number };
   [AppEvents.KNOWLEDGE_REINDEXED]: { knowledgeBaseId: string };
   [AppEvents.AUDIT_LOGGED]: Record<string, unknown>;

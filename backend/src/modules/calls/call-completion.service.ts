@@ -68,7 +68,11 @@ export class CallCompletionService {
       status: call.status,
     });
 
-    eventBus.emit(AppEvents.CALL_COMPLETED, { callId: call.id, status: call.status });
+    eventBus.emit(AppEvents.CALL_COMPLETED, {
+      callId: call.id,
+      organizationId: call.organizationId,
+      status: call.status,
+    });
 
     return {
       postCallEnqueued: true,

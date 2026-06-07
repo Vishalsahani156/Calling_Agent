@@ -9,6 +9,14 @@ export const createUserSchema = z.object({
   roleId: z.string().uuid(),
 });
 
+export const inviteUserSchema = z.object({
+  email: z.string().email(),
+  firstName: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(100),
+  phone: z.string().max(20).optional(),
+  roleId: z.string().uuid(),
+});
+
 export const updateUserSchema = z.object({
   firstName: z.string().min(1).max(100).optional(),
   lastName: z.string().min(1).max(100).optional(),

@@ -291,6 +291,17 @@ export class CampaignsService {
     const campaign = await campaignsRepository.findById(id, organizationId);
     if (!campaign) throw new NotFoundError('Campaign not found');
 
+    const [dispositionStats, leadQualifiedCount, hourlyTimeline] = await Promise.all([
+      campaignsRepository.countCallsByDisposition(id, organizationId),
+      campaignsRepository.countLeadQualified(id, organizationId),
+      campaignsRepository.countCallsByHour(id, organizationId),
+    ]);
+
+    const dispositionTotal = dispositionStats.reduce(
+      (sum, row) => sum + row._count.disposition,
+      0,
+    );
+
     return {
       campaign: {
         id: campaign.id,
@@ -302,8 +313,22 @@ export class CampaignsService {
       summary: analytics,
       sections: {
         performance: analytics,
-        disposition: { stub: true, message: 'Disposition breakdown available in post-MVP' },
-        timeline: { stub: true, message: 'Hourly timeline available in post-MVP' },
+        disposition: {
+          total: dispositionTotal,
+          leadQualified: leadQualifiedCount,
+          byDisposition: Object.fromEntries(
+            dispositionStats.map((row) => [row.disposition, row._count.disposition]),
+          ),
+          unrated: Math.max(analytics.calls.total - dispositionTotal, 0),
+        },
+        timeline: {
+          granularity: 'hour',
+          buckets: hourlyTimeline.map((row) => ({
+            hour: row.hour.toISOString(),
+            total: Number(row.total),
+            completed: Number(row.completed),
+          })),
+        },
       },
       generatedAt: new Date().toISOString(),
     };

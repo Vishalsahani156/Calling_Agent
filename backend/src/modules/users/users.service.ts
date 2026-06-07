@@ -1,10 +1,15 @@
 import bcrypt from 'bcryptjs';
+import { env } from '../../config/env';
+import { authRepository } from '../auth/auth.repository';
 import { usersRepository } from './users.repository';
-import { CreateUserInput, UpdateUserInput } from './users.types';
+import { CreateUserInput, InviteUserInput, UpdateUserInput } from './users.types';
 import { ConflictError, NotFoundError, ForbiddenError } from '../../shared/errors/app.error';
 import { getPagination, buildPaginatedMeta } from '../../shared/utils/response';
+import { generateToken, hashToken } from '../../shared/utils/crypto.util';
+import { emailService } from '../../shared/services/email.service';
 
 const BCRYPT_ROUNDS = 12;
+const INVITE_EXPIRY_MS = 72 * 60 * 60 * 1_000;
 
 function formatUser(user: {
   id: string;
@@ -45,6 +50,42 @@ export class UsersService {
     const user = await usersRepository.findById(id, organizationId);
     if (!user) throw new NotFoundError('User not found');
     return formatUser(user);
+  }
+
+  async invite(organizationId: string, input: InviteUserInput, requesterRole: string) {
+    if (!['super_admin', 'org_admin'].includes(requesterRole)) {
+      throw new ForbiddenError('Only admins can invite users');
+    }
+
+    const existing = await usersRepository.findByEmail(input.email);
+    if (existing) throw new ConflictError('Email already in use');
+
+    const temporaryPassword = generateToken(24);
+    const passwordHash = await bcrypt.hash(temporaryPassword, BCRYPT_ROUNDS);
+    const user = await usersRepository.create({
+      email: input.email,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      phone: input.phone,
+      roleId: input.roleId,
+      passwordHash,
+      organizationId,
+    });
+
+    const inviteToken = generateToken(32);
+    await authRepository.createPasswordResetToken(
+      user.id,
+      hashToken(inviteToken),
+      new Date(Date.now() + INVITE_EXPIRY_MS),
+    );
+
+    const inviteUrl = `${env.CORS_ORIGIN}/reset-password?token=${inviteToken}`;
+    await emailService.sendUserInviteEmail(input.email, input.firstName, inviteUrl);
+
+    return {
+      message: 'Invitation email sent',
+      user: formatUser(user),
+    };
   }
 
   async create(organizationId: string, input: CreateUserInput, requesterRole: string) {

@@ -155,7 +155,11 @@ async function processDialJob(job: Job<CampaignDialerJobData>): Promise<{ action
     },
   });
 
-  eventBus.emit(AppEvents.CALL_INITIATED, { callId: call.id, campaignId });
+  eventBus.emit(AppEvents.CALL_INITIATED, {
+    callId: call.id,
+    organizationId,
+    campaignId,
+  });
 
   const flowUrl = campaign.exotelFlowUrl ?? env.EXOTEL_FLOW_URL;
   const callerId = campaign.callerPhone || env.EXOTEL_CALLER_ID!;

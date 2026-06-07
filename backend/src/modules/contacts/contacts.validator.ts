@@ -47,6 +47,7 @@ export const importContactsSchema = z.object({
     .union([z.boolean(), z.enum(['true', 'false'])])
     .optional()
     .transform((value: boolean | 'true' | 'false' | undefined) => value === true || value === 'true'),
+  groupId: z.string().uuid().optional(),
 });
 
 export const createNoteSchema = z.object({

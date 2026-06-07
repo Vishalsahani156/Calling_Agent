@@ -107,6 +107,44 @@ export class CampaignsRepository {
       _count: { status: true },
     });
   }
+
+  countCallsByDisposition(campaignId: string, organizationId: string) {
+    return prisma.call.groupBy({
+      by: ['disposition'],
+      where: {
+        campaignId,
+        organizationId,
+        disposition: { not: null },
+      },
+      _count: { disposition: true },
+    });
+  }
+
+  countLeadQualified(campaignId: string, organizationId: string) {
+    return prisma.call.count({
+      where: {
+        campaignId,
+        organizationId,
+        leadQualified: true,
+      },
+    });
+  }
+
+  countCallsByHour(campaignId: string, organizationId: string) {
+    return prisma.$queryRaw<
+      Array<{ hour: Date; total: bigint; completed: bigint }>
+    >`
+      SELECT DATE_TRUNC('hour', started_at) AS hour,
+             COUNT(*)::bigint AS total,
+             COUNT(*) FILTER (WHERE status = 'completed')::bigint AS completed
+      FROM calls
+      WHERE campaign_id = ${campaignId}::uuid
+        AND organization_id = ${organizationId}::uuid
+        AND started_at IS NOT NULL
+      GROUP BY DATE_TRUNC('hour', started_at)
+      ORDER BY hour ASC
+    `;
+  }
 }
 
 export const campaignsRepository = new CampaignsRepository();

@@ -34,6 +34,7 @@ export const listAgentsQuerySchema = z.object({
 
 export const testAgentSchema = z.object({
   message: z.string().min(1).max(4000),
+  knowledgeBaseId: z.string().uuid().optional(),
   conversationHistory: z
     .array(
       z.object({

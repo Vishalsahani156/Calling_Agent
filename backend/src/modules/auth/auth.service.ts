@@ -17,6 +17,7 @@ import {
   NotFoundError,
 } from '../../shared/errors/app.error';
 import { hashToken, generateToken, slugify } from '../../shared/utils/crypto.util';
+import { emailService } from '../../shared/services/email.service';
 import { JwtAccessPayload, JwtRefreshPayload } from '../../types/jwt';
 import { eventBus, AppEvents } from '../../events/event-bus';
 
@@ -244,9 +245,8 @@ export class AuthService {
 
     await authRepository.createPasswordResetToken(user.id, tokenHash, expiresAt);
 
-    if (env.NODE_ENV === 'development') {
-      console.log(`[dev] Password reset token for ${input.email}: ${token}`);
-    }
+    const resetUrl = `${env.CORS_ORIGIN}/reset-password?token=${token}`;
+    await emailService.sendPasswordResetEmail(input.email, resetUrl);
 
     return { message: 'If the email exists, a reset link has been sent' };
   }

@@ -6,6 +6,7 @@ import { validate } from '../../middleware/validate';
 import { auditLog, auditResponseHook } from '../../middleware/audit-log';
 import {
   createUserSchema,
+  inviteUserSchema,
   updateUserSchema,
   userIdParamSchema,
   listUsersQuerySchema,
@@ -41,6 +42,15 @@ router.post(
   auditLog({ action: 'create_user', resourceType: 'user' }),
   auditResponseHook,
   usersController.create,
+);
+
+router.post(
+  '/invite',
+  requirePermission('users', 'write'),
+  validate({ body: inviteUserSchema }),
+  auditLog({ action: 'invite_user', resourceType: 'user' }),
+  auditResponseHook,
+  usersController.invite,
 );
 
 router.get(

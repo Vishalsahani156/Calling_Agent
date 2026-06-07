@@ -3,6 +3,8 @@ import { contactsService } from './contacts.service';
 import { sendSuccess } from '../../shared/utils/response';
 import { asyncHandler } from '../../shared/utils/async-handler';
 import { BadRequestError } from '../../shared/errors/app.error';
+import { enqueueCsvImport } from '../../jobs/queues';
+import { saveImportCsvFile } from '../../shared/utils/import-file.util';
 
 export class ContactsController {
   list = asyncHandler(async (req: Request, res: Response) => {
@@ -42,12 +44,23 @@ export class ContactsController {
       throw new BadRequestError('CSV file is required');
     }
 
-    const result = await contactsService.importFromCsv(
-      req.user!.organizationId,
-      req.file.buffer,
-      { skipDuplicates: req.body.skipDuplicates },
+    const filePath = await saveImportCsvFile(req.user!.organizationId, req.file.buffer);
+    const jobId = await enqueueCsvImport({
+      organizationId: req.user!.organizationId,
+      filePath,
+      importedById: req.user!.id,
+      groupId: req.body.groupId,
+    });
+
+    sendSuccess(
+      res,
+      {
+        jobId,
+        status: 'queued',
+        message: 'Contact import queued for background processing',
+      },
+      202,
     );
-    sendSuccess(res, result, 201);
   });
 
   export = asyncHandler(async (req: Request, res: Response) => {

@@ -7,6 +7,14 @@ export type CreateUserInput = {
   roleId: string;
 };
 
+export type InviteUserInput = {
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone?: string;
+  roleId: string;
+};
+
 export type UpdateUserInput = {
   firstName?: string;
   lastName?: string;

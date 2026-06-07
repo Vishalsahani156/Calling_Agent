@@ -23,6 +23,15 @@ export class UsersController {
     sendSuccess(res, result, 201);
   });
 
+  invite = asyncHandler(async (req: Request, res: Response) => {
+    const result = await usersService.invite(
+      req.user!.organizationId,
+      req.body,
+      req.user!.roleName,
+    );
+    sendSuccess(res, result, 202);
+  });
+
   update = asyncHandler(async (req: Request, res: Response) => {
     const result = await usersService.update(
       req.params.id,

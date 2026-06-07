@@ -5,6 +5,8 @@ import { CreateAgentInput, TestAgentInput, UpdateAgentInput } from './agents.typ
 import { ConflictError, NotFoundError } from '../../shared/errors/app.error';
 import { getPagination, buildPaginatedMeta } from '../../shared/utils/response';
 import { env } from '../../config/env';
+import { knowledgeService } from '../knowledge/knowledge.service';
+import { formatKbContext } from '../../voice/call-context';
 
 function formatAgent(agent: {
   id: string;
@@ -105,8 +107,40 @@ export class AgentsService {
     const llmConfig = (agent.llmConfig ?? {}) as { model?: string; temperature?: number };
     const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 
+    let faqAnswer: string | null = null;
+    let kbContext: string | null = null;
+
+    if (input.knowledgeBaseId) {
+      const retrieval = await knowledgeService.retrieveForQuery(
+        input.knowledgeBaseId,
+        organizationId,
+        input.message,
+      );
+
+      if (retrieval.faqMatch) {
+        faqAnswer = retrieval.faqMatch.answer;
+      } else {
+        kbContext = formatKbContext(retrieval);
+      }
+    }
+
+    if (faqAnswer) {
+      return {
+        mock: false,
+        agent: { id: agent.id, name: agent.name },
+        response: faqAnswer,
+        rag: {
+          knowledgeBaseId: input.knowledgeBaseId,
+          faqMatch: true,
+        },
+      };
+    }
+
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: 'system', content: agent.personalityPrompt },
+      ...(kbContext
+        ? [{ role: 'system' as const, content: `Relevant knowledge base context:\n${kbContext}` }]
+        : []),
       ...(input.conversationHistory ?? []).map((entry) => ({
         role: entry.role,
         content: entry.content,
@@ -128,6 +162,13 @@ export class AgentsService {
       },
       response: completion.choices[0]?.message?.content ?? '',
       usage: completion.usage,
+      rag: input.knowledgeBaseId
+        ? {
+            knowledgeBaseId: input.knowledgeBaseId,
+            chunksUsed: kbContext ? kbContext.split('\n\n').length : 0,
+            faqMatch: false,
+          }
+        : undefined,
     };
   }
 }
