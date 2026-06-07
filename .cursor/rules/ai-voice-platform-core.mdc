@@ -1,0 +1,32 @@
+---
+description: Core standards for AI Voice Calling Agent platform
+alwaysApply: true
+---
+
+# AI Voice Calling Agent — Core Rules
+
+Production-grade SaaS. Documentation: `docs/README.md`
+
+## Docs by layer
+- Backend: `docs/backend/` — API, database, voice, AI
+- Frontend: `docs/frontend/` — dashboard, UI, React Query
+- Shared: `docs/shared/` — system architecture, roadmaps, general rules
+
+## Stack
+- Frontend: Next.js App Router, TypeScript, Tailwind, ShadCN, TanStack Query, React Hook Form, Zod
+- Backend: Express, TypeScript, Prisma, JWT + refresh + RBAC
+- DB: PostgreSQL (NeoDB/Neon). Telephony: Exotel. Queue: BullMQ + Redis
+
+## Non-negotiables
+1. Never change existing business logic unless explicitly requested
+2. TypeScript only — no JavaScript, no mocks/placeholders/demo code
+3. Clean architecture: Route → Validator → Controller → Service → Repository → Prisma
+4. No business logic in controllers; no raw fetch in React components
+5. Before coding: analyze architecture, deps, folder structure, schema; list affected files
+6. Complete implementations only; preserve backward compatibility
+
+## API base
+All REST endpoints under `/api/v1`.
+
+## Priorities
+Scalability, security, maintainability, performance, UX, production readiness.

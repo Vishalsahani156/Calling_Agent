@@ -1,0 +1,18 @@
+---
+description: Frontend conventions for Next.js dashboard
+globs: frontend/**/*
+alwaysApply: false
+---
+
+# Frontend Rules
+
+Feature-based structure: `src/app/`, `src/features/`, `src/components/`, `src/lib/`, `src/hooks/`.
+
+Docs: `docs/frontend/`
+
+- All server data via TanStack Query (`useQuery`, `useMutation`, query keys in `lib/query-keys.ts`)
+- Forms: React Hook Form + Zod; never uncontrolled forms
+- UI: ShadCN + Tailwind; modern SaaS dashboard (CRM/call-center quality)
+- Components: small, typed, reusable; max ~300 lines
+- Mobile responsive, accessible, consistent spacing/typography
+- API calls only through `lib/api-client.ts` or feature `services/` — not inline in components

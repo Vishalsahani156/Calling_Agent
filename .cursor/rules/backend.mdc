@@ -1,0 +1,19 @@
+---
+description: Backend conventions for Express API
+globs: backend/**/*
+alwaysApply: false
+---
+
+# Backend Rules
+
+Layered modules per domain: `routes`, `controller`, `service`, `repository`, `validator`, `dto`.
+
+Docs: `docs/backend/`
+
+- Controllers: validate → call service → respond. Zero business logic.
+- Services: campaigns, calls, AI workflows, knowledge retrieval
+- Prisma only; relations, indexes, constraints, transactions; avoid raw SQL
+- Security on every route: Zod validation, JWT auth, RBAC, rate limiting, audit logs
+- Never expose secrets/tokens in responses or logs
+- Async work via BullMQ queues — never block request thread for dial/import/analytics
+- AI: multi-language, context retention, barge-in, KB RAG, call summaries, stored conversation history

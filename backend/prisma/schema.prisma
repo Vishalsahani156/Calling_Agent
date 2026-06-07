@@ -1,0 +1,610 @@
+// AI Voice Calling Agent Platform — Phase 1 Database Schema
+// Source: docs/architecture/TECHNICAL-ARCHITECTURE.md Section 3
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum RoleName {
+  super_admin
+  org_admin
+  manager
+  agent
+  viewer
+}
+
+enum OrganizationPlan {
+  free
+  starter
+  pro
+  enterprise
+}
+
+enum CampaignStatus {
+  draft
+  scheduled
+  running
+  paused
+  stopped
+  completed
+}
+
+enum CampaignContactStatus {
+  pending
+  queued
+  dialing
+  connected
+  completed
+  failed
+  skipped
+}
+
+enum CallDirection {
+  outbound
+}
+
+enum CallStatus {
+  initiated
+  ringing
+  in_progress
+  completed
+  failed
+  busy
+  no_answer
+  canceled
+}
+
+enum CallDisposition {
+  interested
+  callback
+  not_interested
+  wrong_number
+}
+
+enum TranscriptSpeaker {
+  agent
+  user
+  system
+}
+
+enum DocumentSourceType {
+  upload
+  url
+  faq
+  manual
+}
+
+enum DocumentStatus {
+  processing
+  ready
+  failed
+}
+
+// ---------------------------------------------------------------------------
+// Multi-tenant core
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id        String           @id @default(uuid()) @db.Uuid
+  name      String           @db.VarChar(200)
+  slug      String           @unique @db.VarChar(100)
+  plan      OrganizationPlan @default(free)
+  settings  Json             @default("{}")
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  users          User[]
+  campaigns      Campaign[]
+  contacts       Contact[]
+  contactTags    ContactTag[]
+  contactGroups  ContactGroup[]
+  aiAgents       AiAgent[]
+  knowledgeBases KnowledgeBase[]
+  calls          Call[]
+  auditLogs      AuditLog[]
+  orgSettings    Settings?
+
+  @@map("organizations")
+}
+
+model Settings {
+  id                String   @id @default(uuid()) @db.Uuid
+  organizationId    String   @unique @map("organization_id") @db.Uuid
+  exotelConfig      Json     @default("{}") @map("exotel_config")
+  defaultCallerId   String?  @map("default_caller_id") @db.VarChar(20)
+  notificationPrefs Json     @default("{}") @map("notification_prefs")
+  retentionDays     Int      @default(90) @map("retention_days")
+  featureFlags      Json     @default("{}") @map("feature_flags")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("settings")
+}
+
+// ---------------------------------------------------------------------------
+// RBAC
+// ---------------------------------------------------------------------------
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        RoleName @unique
+  description String?  @db.VarChar(500)
+  isSystem    Boolean  @default(true) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users           User[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id        String   @id @default(uuid()) @db.Uuid
+  resource  String   @db.VarChar(100)
+  action    String   @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  rolePermissions RolePermission[]
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model User {
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique @db.VarChar(255)
+  passwordHash    String    @map("password_hash") @db.VarChar(255)
+  firstName       String    @map("first_name") @db.VarChar(100)
+  lastName        String    @map("last_name") @db.VarChar(100)
+  phone           String?   @db.VarChar(20)
+  organizationId  String    @map("organization_id") @db.Uuid
+  roleId          String    @map("role_id") @db.Uuid
+  isActive        Boolean   @default(true) @map("is_active")
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  lastLoginAt     DateTime? @map("last_login_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  role                Role                 @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  campaignsCreated    Campaign[]           @relation("CampaignCreator")
+  contactNotes        ContactNote[]
+  auditLogs           AuditLog[]
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([roleId])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// AI configuration
+// ---------------------------------------------------------------------------
+
+model AiAgent {
+  id                  String   @id @default(uuid()) @db.Uuid
+  organizationId      String   @map("organization_id") @db.Uuid
+  name                String   @db.VarChar(200)
+  voiceProfile        Json     @default("{}") @map("voice_profile")
+  personalityPrompt   String   @map("personality_prompt") @db.Text
+  greetingScript      Json     @default("{\"en\":\"Hello! How can I help you today?\"}") @map("greeting_script")
+  interruptionEnabled Boolean  @default(true) @map("interruption_enabled")
+  maxSilenceSeconds   Int      @default(15) @map("max_silence_seconds")
+  llmConfig           Json     @default("{}") @map("llm_config")
+  toolsEnabled        Json     @default("{}") @map("tools_enabled")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  campaigns    Campaign[]
+  calls        Call[]
+
+  @@index([organizationId])
+  @@map("ai_agents")
+}
+
+model KnowledgeBase {
+  id              String   @id @default(uuid()) @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  name            String   @db.VarChar(200)
+  description     String?  @db.Text
+  defaultLanguage String   @default("en") @map("default_language") @db.VarChar(10)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  documents    KnowledgeDocument[]
+  faqs         Faq[]
+  campaigns    Campaign[]
+
+  @@index([organizationId])
+  @@map("knowledge_bases")
+}
+
+model KnowledgeDocument {
+  id              String             @id @default(uuid()) @db.Uuid
+  knowledgeBaseId String             @map("knowledge_base_id") @db.Uuid
+  title           String             @db.VarChar(500)
+  sourceType      DocumentSourceType @default(manual) @map("source_type")
+  rawContent      String?            @map("raw_content") @db.Text
+  fileUrl         String?            @map("file_url") @db.VarChar(1000)
+  status          DocumentStatus     @default(processing)
+  metadata        Json               @default("{}")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  knowledgeBase KnowledgeBase    @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  chunks        KnowledgeChunk[]
+
+  @@index([knowledgeBaseId])
+  @@map("knowledge_documents")
+}
+
+model KnowledgeChunk {
+  id         String                       @id @default(uuid()) @db.Uuid
+  documentId String                       @map("document_id") @db.Uuid
+  content    String                       @db.Text
+  embedding  Unsupported("vector(1536)")?
+  tokenCount Int                          @default(0) @map("token_count")
+  chunkIndex Int                          @map("chunk_index")
+  createdAt  DateTime                     @default(now()) @map("created_at")
+  updatedAt  DateTime                     @updatedAt @map("updated_at")
+
+  document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@map("knowledge_chunks")
+}
+
+model Faq {
+  id              String                       @id @default(uuid()) @db.Uuid
+  knowledgeBaseId String                       @map("knowledge_base_id") @db.Uuid
+  question        String                       @db.Text
+  answer          String                       @db.Text
+  language        String                       @default("en") @db.VarChar(10)
+  embedding       Unsupported("vector(1536)")?
+  createdAt       DateTime                     @default(now()) @map("created_at")
+  updatedAt       DateTime                     @updatedAt @map("updated_at")
+
+  knowledgeBase KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+
+  @@index([knowledgeBaseId])
+  @@map("faqs")
+}
+
+// ---------------------------------------------------------------------------
+// Campaigns
+// ---------------------------------------------------------------------------
+
+model Campaign {
+  id                 String         @id @default(uuid()) @db.Uuid
+  organizationId     String         @map("organization_id") @db.Uuid
+  name               String         @db.VarChar(200)
+  description        String?        @db.Text
+  status             CampaignStatus @default(draft)
+  aiAgentId          String         @map("ai_agent_id") @db.Uuid
+  knowledgeBaseId    String?        @map("knowledge_base_id") @db.Uuid
+  callerPhone        String         @map("caller_phone") @db.VarChar(20)
+  exotelFlowUrl      String?        @map("exotel_flow_url") @db.VarChar(1000)
+  scheduleStart      DateTime?      @map("schedule_start")
+  scheduleEnd        DateTime?      @map("schedule_end")
+  timezone           String         @default("Asia/Kolkata") @db.VarChar(50)
+  maxConcurrentCalls Int            @default(5) @map("max_concurrent_calls")
+  retryPolicy        Json           @default("{\"maxAttempts\":3,\"retryDelayMinutes\":30}") @map("retry_policy")
+  createdById        String         @map("created_by") @db.Uuid
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  organization  Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  aiAgent       AiAgent           @relation(fields: [aiAgentId], references: [id], onDelete: Restrict)
+  knowledgeBase KnowledgeBase?    @relation(fields: [knowledgeBaseId], references: [id], onDelete: SetNull)
+  createdBy     User              @relation("CampaignCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  contacts      CampaignContact[]
+  calls         Call[]
+
+  @@index([organizationId, status])
+  @@index([scheduleStart])
+  @@map("campaigns")
+}
+
+model CampaignContact {
+  id            String                @id @default(uuid()) @db.Uuid
+  campaignId    String                @map("campaign_id") @db.Uuid
+  contactId     String                @map("contact_id") @db.Uuid
+  status        CampaignContactStatus @default(pending)
+  attemptCount  Int                   @default(0) @map("attempt_count")
+  lastAttemptAt DateTime?             @map("last_attempt_at")
+  nextRetryAt   DateTime?             @map("next_retry_at")
+  leadScore     Float?                @map("lead_score")
+  qualification Json                  @default("{}")
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, contactId])
+  @@index([campaignId, status])
+  @@index([nextRetryAt])
+  @@map("campaign_contacts")
+}
+
+// ---------------------------------------------------------------------------
+// Contacts
+// ---------------------------------------------------------------------------
+
+model Contact {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  phone          String   @db.VarChar(20)
+  firstName      String?  @map("first_name") @db.VarChar(100)
+  lastName       String?  @map("last_name") @db.VarChar(100)
+  email          String?  @db.VarChar(255)
+  metadata       Json     @default("{}")
+  optOut         Boolean  @default(false) @map("opt_out")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  tagMaps          ContactTagMap[]
+  groupMaps        ContactGroupMap[]
+  notes            ContactNote[]
+  campaignContacts CampaignContact[]
+  calls            Call[]
+
+  @@unique([organizationId, phone])
+  @@index([organizationId])
+  @@index([phone])
+  @@map("contacts")
+}
+
+model ContactTag {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String   @db.VarChar(100)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tagMaps      ContactTagMap[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("contact_tags")
+}
+
+model ContactTagMap {
+  contactId String @map("contact_id") @db.Uuid
+  tagId     String @map("tag_id") @db.Uuid
+
+  contact Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag     ContactTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+  @@map("contact_tag_map")
+}
+
+model ContactGroup {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String   @db.VarChar(100)
+  description    String?  @db.VarChar(500)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  groupMaps    ContactGroupMap[]
+
+  @@index([organizationId])
+  @@map("contact_groups")
+}
+
+model ContactGroupMap {
+  contactId String @map("contact_id") @db.Uuid
+  groupId   String @map("group_id") @db.Uuid
+
+  contact Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  group   ContactGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, groupId])
+  @@map("contact_group_map")
+}
+
+model ContactNote {
+  id        String   @id @default(uuid()) @db.Uuid
+  contactId String   @map("contact_id") @db.Uuid
+  authorId  String   @map("author_id") @db.Uuid
+  note      String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([contactId])
+  @@map("contact_notes")
+}
+
+// ---------------------------------------------------------------------------
+// Calls and media
+// ---------------------------------------------------------------------------
+
+model Call {
+  id               String           @id @default(uuid()) @db.Uuid
+  organizationId   String           @map("organization_id") @db.Uuid
+  campaignId       String?          @map("campaign_id") @db.Uuid
+  contactId        String?          @map("contact_id") @db.Uuid
+  aiAgentId        String?          @map("ai_agent_id") @db.Uuid
+  exotelCallSid    String?          @unique @map("exotel_call_sid") @db.VarChar(100)
+  direction        CallDirection    @default(outbound)
+  status           CallStatus       @default(initiated)
+  startedAt        DateTime?        @map("started_at")
+  answeredAt       DateTime?        @map("answered_at")
+  endedAt          DateTime?        @map("ended_at")
+  durationSeconds  Int?             @map("duration_seconds")
+  languageDetected String?          @map("language_detected") @db.VarChar(10)
+  sentiment        Json             @default("{}")
+  leadQualified    Boolean          @default(false) @map("lead_qualified")
+  summary          String?          @db.Text
+  disposition      CallDisposition?
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  organization       Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  campaign           Campaign?            @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  contact            Contact?             @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  aiAgent            AiAgent?             @relation(fields: [aiAgentId], references: [id], onDelete: SetNull)
+  recording          CallRecording?
+  transcripts        CallTranscript[]
+  logs               CallLog[]
+  conversationMemory ConversationMemory[]
+
+  @@index([campaignId, status])
+  @@index([contactId])
+  @@index([exotelCallSid])
+  @@index([startedAt(sort: Desc)])
+  @@map("calls")
+}
+
+model CallRecording {
+  id                 String   @id @default(uuid()) @db.Uuid
+  callId             String   @unique @map("call_id") @db.Uuid
+  storageUrl         String?  @map("storage_url") @db.VarChar(1000)
+  exotelRecordingUrl String?  @map("exotel_recording_url") @db.VarChar(1000)
+  durationSeconds    Int?     @map("duration_seconds")
+  format             String?  @db.VarChar(20)
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@map("call_recordings")
+}
+
+model CallTranscript {
+  id         String            @id @default(uuid()) @db.Uuid
+  callId     String            @map("call_id") @db.Uuid
+  speaker    TranscriptSpeaker
+  text       String            @db.Text
+  language   String?           @db.VarChar(10)
+  confidence Float?
+  startMs    Int               @map("start_ms")
+  endMs      Int               @map("end_ms")
+  sequence   Int
+  createdAt  DateTime          @default(now()) @map("created_at")
+
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([callId, sequence])
+  @@map("call_transcripts")
+}
+
+model CallLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  callId    String   @map("call_id") @db.Uuid
+  eventType String   @map("event_type") @db.VarChar(100)
+  payload   Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([callId, createdAt])
+  @@map("call_logs")
+}
+
+model ConversationMemory {
+  id        String   @id @default(uuid()) @db.Uuid
+  callId    String   @map("call_id") @db.Uuid
+  key       String   @db.VarChar(200)
+  value     Json     @default("{}")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@unique([callId, key])
+  @@index([callId])
+  @@map("conversation_memory")
+}
+
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
+  action         String   @db.VarChar(100)
+  resourceType   String   @map("resource_type") @db.VarChar(100)
+  resourceId     String?  @map("resource_id") @db.VarChar(100)
+  ipAddress      String?  @map("ip_address") @db.VarChar(45)
+  userAgent      String?  @map("user_agent") @db.VarChar(500)
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
