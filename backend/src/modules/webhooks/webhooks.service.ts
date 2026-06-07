@@ -2,6 +2,7 @@ import { CallStatus, Prisma } from '@prisma/client';
 import { webhooksRepository } from './webhooks.repository';
 import { NotFoundError } from '../../shared/errors/app.error';
 import { eventBus, AppEvents } from '../../events/event-bus';
+import { enqueuePostCall } from '../../jobs/queues';
 
 const TERMINAL_STATUSES: CallStatus[] = [
   CallStatus.completed,
@@ -102,6 +103,10 @@ export class WebhooksService {
 
     if (TERMINAL_STATUSES.includes(status)) {
       eventBus.emit(AppEvents.CALL_COMPLETED, { callId: call.id, status });
+      await enqueuePostCall({
+        callId: call.id,
+        organizationId: call.organizationId,
+      });
     }
 
     return {

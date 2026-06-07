@@ -254,6 +254,109 @@ export class KnowledgeRepository {
       faqId,
     );
   }
+
+  searchChunksByVector(
+    knowledgeBaseId: string,
+    organizationId: string,
+    embedding: number[],
+    limit: number,
+  ) {
+    const vectorLiteral = `[${embedding.join(',')}]`;
+    return prisma.$queryRawUnsafe<
+      Array<{ id: string; content: string; similarity: number }>
+    >(
+      `SELECT kc.id, kc.content,
+              1 - (kc.embedding <=> $1::vector) AS similarity
+       FROM knowledge_chunks kc
+       INNER JOIN knowledge_documents kd ON kd.id = kc.document_id
+       INNER JOIN knowledge_bases kb ON kb.id = kd.knowledge_base_id
+       WHERE kd.knowledge_base_id = $2::uuid
+         AND kb.organization_id = $3::uuid
+         AND kc.embedding IS NOT NULL
+       ORDER BY kc.embedding <=> $1::vector
+       LIMIT $4`,
+      vectorLiteral,
+      knowledgeBaseId,
+      organizationId,
+      limit,
+    );
+  }
+
+  searchChunksByKeyword(
+    knowledgeBaseId: string,
+    organizationId: string,
+    query: string,
+    limit: number,
+  ) {
+    return prisma.$queryRawUnsafe<
+      Array<{ id: string; content: string; rank: number }>
+    >(
+      `SELECT kc.id, kc.content,
+              ts_rank(to_tsvector('english', kc.content), plainto_tsquery('english', $1)) AS rank
+       FROM knowledge_chunks kc
+       INNER JOIN knowledge_documents kd ON kd.id = kc.document_id
+       INNER JOIN knowledge_bases kb ON kb.id = kd.knowledge_base_id
+       WHERE kd.knowledge_base_id = $2::uuid
+         AND kb.organization_id = $3::uuid
+         AND to_tsvector('english', kc.content) @@ plainto_tsquery('english', $1)
+       ORDER BY rank DESC
+       LIMIT $4`,
+      query,
+      knowledgeBaseId,
+      organizationId,
+      limit,
+    );
+  }
+
+  searchFaqsByVector(
+    knowledgeBaseId: string,
+    organizationId: string,
+    embedding: number[],
+    limit: number,
+    language?: string,
+  ) {
+    const vectorLiteral = `[${embedding.join(',')}]`;
+
+    if (language) {
+      return prisma.$queryRawUnsafe<
+        Array<{ id: string; question: string; answer: string; similarity: number }>
+      >(
+        `SELECT f.id, f.question, f.answer,
+                1 - (f.embedding <=> $1::vector) AS similarity
+         FROM faqs f
+         INNER JOIN knowledge_bases kb ON kb.id = f.knowledge_base_id
+         WHERE f.knowledge_base_id = $2::uuid
+           AND kb.organization_id = $3::uuid
+           AND f.embedding IS NOT NULL
+           AND f.language = $5
+         ORDER BY f.embedding <=> $1::vector
+         LIMIT $4`,
+        vectorLiteral,
+        knowledgeBaseId,
+        organizationId,
+        limit,
+        language,
+      );
+    }
+
+    return prisma.$queryRawUnsafe<
+      Array<{ id: string; question: string; answer: string; similarity: number }>
+    >(
+      `SELECT f.id, f.question, f.answer,
+              1 - (f.embedding <=> $1::vector) AS similarity
+       FROM faqs f
+       INNER JOIN knowledge_bases kb ON kb.id = f.knowledge_base_id
+       WHERE f.knowledge_base_id = $2::uuid
+         AND kb.organization_id = $3::uuid
+         AND f.embedding IS NOT NULL
+       ORDER BY f.embedding <=> $1::vector
+       LIMIT $4`,
+      vectorLiteral,
+      knowledgeBaseId,
+      organizationId,
+      limit,
+    );
+  }
 }
 
 export const knowledgeRepository = new KnowledgeRepository();

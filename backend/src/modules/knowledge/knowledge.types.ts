@@ -41,3 +41,29 @@ export type UploadDocumentInput = {
   title?: string;
   metadata?: Record<string, unknown>;
 };
+
+export type RetrievedChunk = {
+  id: string;
+  content: string;
+  score: number;
+  source: 'chunk' | 'faq';
+};
+
+export type FaqMatch = {
+  id: string;
+  question: string;
+  answer: string;
+  similarity: number;
+};
+
+export type RetrievalResult = {
+  chunks: RetrievedChunk[];
+  faqMatch: FaqMatch | null;
+  embeddingEnabled: boolean;
+};
+
+export type RetrieveQueryOptions = {
+  topK?: number;
+  faqThreshold?: number;
+  language?: string;
+};

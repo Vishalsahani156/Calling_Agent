@@ -1,11 +1,14 @@
 import type WebSocket from 'ws';
 import pino from 'pino';
+import type { TranscriptSpeaker } from '@prisma/client';
 import {
   buildMediaFrame,
   decodeMediaPayload,
   serializeExotelFrame,
   type ExotelIncomingFrame,
 } from '../exotel-protocol';
+import type { RagRetriever, TranscriptWriter } from '../call-context';
+import { formatKbContext } from '../call-context';
 
 const logger = pino({ name: 'conversation-orchestrator' });
 
@@ -63,6 +66,9 @@ export interface OrchestratorConfig {
   stt: SttAdapter;
   llm: LlmAdapter;
   tts: TtsAdapter;
+  campaignPrompt?: string;
+  ragRetriever?: RagRetriever;
+  transcriptWriter?: TranscriptWriter | null;
 }
 
 export class ConversationOrchestrator {
@@ -76,7 +82,16 @@ export class ConversationOrchestrator {
   constructor(socket: WebSocket, config: OrchestratorConfig) {
     this.socket = socket;
     this.config = config;
-    this.messages.push({ role: 'system', content: config.systemPrompt });
+
+    const systemParts = [config.systemPrompt.trim()];
+    if (config.campaignPrompt?.trim()) {
+      systemParts.push(config.campaignPrompt.trim());
+    }
+    systemParts.push(
+      'Use the provided knowledge base context when relevant. Keep replies short and natural for voice.',
+    );
+
+    this.messages.push({ role: 'system', content: systemParts.join('\n\n') });
   }
 
   async start(): Promise<void> {
@@ -88,7 +103,9 @@ export class ConversationOrchestrator {
       void this.handleTranscript(result);
     });
 
-    await this.speak(configGreeting(this.config.greeting));
+    const greeting = configGreeting(this.config.greeting);
+    await this.speak(greeting);
+    await this.persistTranscript('agent', greeting);
   }
 
   async handleFrame(frame: ExotelIncomingFrame): Promise<void> {
@@ -166,19 +183,72 @@ export class ConversationOrchestrator {
     this.processing = true;
 
     try {
+      await this.persistTranscript('user', text);
       this.messages.push({ role: 'user', content: text });
 
-      const reply = await this.config.llm.complete(this.messages, {
-        temperature: 0.7,
-        maxTokens: 300,
-      });
+      let reply: string;
+
+      if (this.config.ragRetriever) {
+        const retrieval = await this.config.ragRetriever.retrieve(text);
+
+        if (retrieval.faqMatch) {
+          reply = retrieval.faqMatch.answer;
+          logger.info(
+            {
+              callId: this.config.callId,
+              faqId: retrieval.faqMatch.id,
+              similarity: retrieval.faqMatch.similarity,
+            },
+            'FAQ fast path matched',
+          );
+        } else {
+          const kbContext = formatKbContext(retrieval);
+          const messagesForLlm = kbContext
+            ? [
+                ...this.messages.slice(0, 1),
+                {
+                  role: 'system' as const,
+                  content: `Relevant knowledge base context:\n${kbContext}`,
+                },
+                ...this.messages.slice(1),
+              ]
+            : this.messages;
+
+          reply = await this.config.llm.complete(messagesForLlm, {
+            temperature: 0.7,
+            maxTokens: 300,
+          });
+        }
+      } else {
+        reply = await this.config.llm.complete(this.messages, {
+          temperature: 0.7,
+          maxTokens: 300,
+        });
+      }
 
       this.messages.push({ role: 'assistant', content: reply });
       await this.speak(reply);
+      await this.persistTranscript('agent', reply);
     } catch (error) {
       logger.error({ callId: this.config.callId, err: error }, 'Conversation turn failed');
     } finally {
       this.processing = false;
+    }
+  }
+
+  private async persistTranscript(
+    speaker: TranscriptSpeaker,
+    text: string,
+    language?: string,
+  ): Promise<void> {
+    if (!this.config.transcriptWriter) {
+      return;
+    }
+
+    try {
+      await this.config.transcriptWriter.append(speaker, text, language);
+    } catch (error) {
+      logger.error({ callId: this.config.callId, speaker, err: error }, 'Transcript persist failed');
     }
   }
 

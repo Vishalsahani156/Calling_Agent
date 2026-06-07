@@ -6,6 +6,11 @@ import { env } from '../config/env';
 import { prisma } from '../config/database';
 import { closeRedis } from '../config/redis';
 import { ExotelProtocolError, parseExotelFrame } from './exotel-protocol';
+import {
+  buildCampaignPrompt,
+  createRagRetriever,
+  createTranscriptWriter,
+} from './call-context';
 import { ConversationOrchestrator } from './orchestrator/conversation-orchestrator';
 import { DeepgramSttAdapter } from './adapters/stt/deepgram.adapter';
 import { OpenAiLlmAdapter } from './adapters/llm/openai.adapter';
@@ -64,7 +69,11 @@ async function resolveCallContext(customParameters: Record<string, string> | und
     where: { id: callId },
     include: {
       aiAgent: true,
-      campaign: true,
+      campaign: {
+        include: {
+          knowledgeBase: { select: { id: true, defaultLanguage: true } },
+        },
+      },
     },
   });
 
@@ -72,11 +81,23 @@ async function resolveCallContext(customParameters: Record<string, string> | und
     return null;
   }
 
+  const knowledgeBaseId = call.campaign?.knowledgeBaseId ?? null;
+  const kbLanguage = call.campaign?.knowledgeBase?.defaultLanguage;
+
   return {
     callId: call.id,
+    organizationId: call.organizationId,
     systemPrompt: call.aiAgent.personalityPrompt,
     greeting: resolveGreeting(call.aiAgent.greetingScript),
     sampleRate: DEFAULT_SAMPLE_RATE,
+    knowledgeBaseId,
+    kbLanguage,
+    campaignPrompt: call.campaign
+      ? buildCampaignPrompt({
+          name: call.campaign.name,
+          description: call.campaign.description,
+        })
+      : undefined,
   };
 }
 
@@ -88,14 +109,26 @@ function createOrchestrator(
     systemPrompt: string;
     greeting: string;
     sampleRate: number;
+    organizationId?: string;
+    knowledgeBaseId?: string | null;
+    kbLanguage?: string;
+    campaignPrompt?: string;
   },
 ): ConversationOrchestrator {
+  const ragRetriever =
+    params.knowledgeBaseId && params.organizationId
+      ? createRagRetriever(params.knowledgeBaseId, params.organizationId, params.kbLanguage)
+      : undefined;
+
   return new ConversationOrchestrator(socket, {
     callId: params.callId,
     streamSid: params.streamSid,
     systemPrompt: params.systemPrompt,
     greeting: params.greeting,
     sampleRate: params.sampleRate,
+    campaignPrompt: params.campaignPrompt,
+    ragRetriever,
+    transcriptWriter: createTranscriptWriter(params.callId),
     stt: new DeepgramSttAdapter(),
     llm: new OpenAiLlmAdapter(),
     tts: new OpenAiTtsAdapter(),
@@ -174,6 +207,10 @@ async function handleMessage(socket: WebSocket, raw: WebSocket.RawData): Promise
       systemPrompt: callContext?.systemPrompt ?? 'You are a helpful voice assistant.',
       greeting: callContext?.greeting ?? DEFAULT_GREETING,
       sampleRate: parseSampleRate(frame.start?.media_format?.sample_rate),
+      organizationId: callContext?.organizationId,
+      knowledgeBaseId: callContext?.knowledgeBaseId,
+      kbLanguage: callContext?.kbLanguage,
+      campaignPrompt: callContext?.campaignPrompt,
     });
 
     session = { orchestrator, streamSid };

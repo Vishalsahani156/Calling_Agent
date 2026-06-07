@@ -6,6 +6,9 @@ import {
   CreateDocumentInput,
   CreateFaqInput,
   CreateKnowledgeBaseInput,
+  RetrieveQueryOptions,
+  RetrievedChunk,
+  RetrievalResult,
   UpdateDocumentInput,
   UpdateFaqInput,
   UpdateKnowledgeBaseInput,
@@ -16,6 +19,9 @@ import { env } from '../../config/env';
 import { eventBus, AppEvents } from '../../events/event-bus';
 
 const CHUNK_SIZE = 500;
+const DEFAULT_TOP_K = 5;
+const DEFAULT_FAQ_THRESHOLD = 0.92;
+const RRF_K = 60;
 
 function formatKnowledgeBase(kb: {
   id: string;
@@ -102,6 +108,35 @@ async function generateEmbedding(text: string): Promise<number[] | null> {
   });
 
   return response.data[0]?.embedding ?? null;
+}
+
+function reciprocalRankFusion(
+  rankedLists: Array<Array<{ id: string; content: string }>>,
+  topK: number,
+): RetrievedChunk[] {
+  const scores = new Map<string, { content: string; score: number }>();
+
+  for (const list of rankedLists) {
+    list.forEach((item, index) => {
+      const rrfScore = 1 / (RRF_K + index + 1);
+      const existing = scores.get(item.id);
+      if (existing) {
+        existing.score += rrfScore;
+      } else {
+        scores.set(item.id, { content: item.content, score: rrfScore });
+      }
+    });
+  }
+
+  return [...scores.entries()]
+    .sort((a, b) => b[1].score - a[1].score)
+    .slice(0, topK)
+    .map(([id, value]) => ({
+      id,
+      content: value.content,
+      score: value.score,
+      source: 'chunk' as const,
+    }));
 }
 
 async function assertKnowledgeBase(id: string, organizationId: string) {
@@ -296,6 +331,91 @@ export class KnowledgeService {
     await this.getFaqById(knowledgeBaseId, faqId, organizationId);
     await knowledgeRepository.deleteFaq(faqId);
     return { message: 'FAQ deleted successfully' };
+  }
+
+  async retrieveForQuery(
+    knowledgeBaseId: string,
+    organizationId: string,
+    query: string,
+    options: RetrieveQueryOptions = {},
+  ): Promise<RetrievalResult> {
+    await assertKnowledgeBase(knowledgeBaseId, organizationId);
+
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
+      return { chunks: [], faqMatch: null, embeddingEnabled: false };
+    }
+
+    const topK = options.topK ?? DEFAULT_TOP_K;
+    const faqThreshold = options.faqThreshold ?? DEFAULT_FAQ_THRESHOLD;
+    const embedding = await generateEmbedding(trimmedQuery);
+
+    if (!embedding) {
+      const keywordResults = await knowledgeRepository.searchChunksByKeyword(
+        knowledgeBaseId,
+        organizationId,
+        trimmedQuery,
+        topK,
+      );
+
+      return {
+        chunks: keywordResults.map((row) => ({
+          id: row.id,
+          content: row.content,
+          score: Number(row.rank),
+          source: 'chunk' as const,
+        })),
+        faqMatch: null,
+        embeddingEnabled: false,
+      };
+    }
+
+    const [vectorChunks, keywordChunks, faqResults] = await Promise.all([
+      knowledgeRepository.searchChunksByVector(
+        knowledgeBaseId,
+        organizationId,
+        embedding,
+        topK * 2,
+      ),
+      knowledgeRepository.searchChunksByKeyword(
+        knowledgeBaseId,
+        organizationId,
+        trimmedQuery,
+        topK * 2,
+      ).catch(() => [] as Array<{ id: string; content: string; rank: number }>),
+      knowledgeRepository.searchFaqsByVector(
+        knowledgeBaseId,
+        organizationId,
+        embedding,
+        3,
+        options.language,
+      ),
+    ]);
+
+    const chunks = reciprocalRankFusion(
+      [
+        vectorChunks.map((row) => ({ id: row.id, content: row.content })),
+        keywordChunks.map((row) => ({ id: row.id, content: row.content })),
+      ],
+      topK,
+    );
+
+    const bestFaq = faqResults[0];
+    const faqMatch =
+      bestFaq && Number(bestFaq.similarity) >= faqThreshold
+        ? {
+            id: bestFaq.id,
+            question: bestFaq.question,
+            answer: bestFaq.answer,
+            similarity: Number(bestFaq.similarity),
+          }
+        : null;
+
+    return {
+      chunks,
+      faqMatch,
+      embeddingEnabled: true,
+    };
   }
 
   async reindex(knowledgeBaseId: string, organizationId: string) {

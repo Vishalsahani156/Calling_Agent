@@ -1,4 +1,4 @@
-import { CallStatus, Prisma } from '@prisma/client';
+import { CallStatus, Prisma, TranscriptSpeaker } from '@prisma/client';
 import { prisma } from '../../config/database';
 
 const callInclude = {
@@ -102,6 +102,41 @@ export class CallsRepository {
   findRecording(callId: string, organizationId: string) {
     return prisma.callRecording.findFirst({
       where: { callId, call: { organizationId } },
+    });
+  }
+
+  getNextTranscriptSequence(callId: string) {
+    return prisma.callTranscript
+      .aggregate({
+        where: { callId },
+        _max: { sequence: true },
+      })
+      .then((result) => (result._max.sequence ?? -1) + 1);
+  }
+
+  createTranscript(
+    callId: string,
+    data: {
+      speaker: TranscriptSpeaker;
+      text: string;
+      sequence: number;
+      startMs: number;
+      endMs: number;
+      language?: string;
+      confidence?: number;
+    },
+  ) {
+    return prisma.callTranscript.create({
+      data: {
+        callId,
+        speaker: data.speaker,
+        text: data.text,
+        sequence: data.sequence,
+        startMs: data.startMs,
+        endMs: data.endMs,
+        language: data.language,
+        confidence: data.confidence,
+      },
     });
   }
 }
