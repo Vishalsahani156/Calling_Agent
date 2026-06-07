@@ -3,6 +3,7 @@ import { webhooksRepository } from './webhooks.repository';
 import { NotFoundError } from '../../shared/errors/app.error';
 import { eventBus, AppEvents } from '../../events/event-bus';
 import { enqueuePostCall } from '../../jobs/queues';
+import { isEscalationRequested } from '../../voice/conversation-store';
 
 const TERMINAL_STATUSES: CallStatus[] = [
   CallStatus.completed,
@@ -116,8 +117,24 @@ export class WebhooksService {
     };
   }
 
-  handlePassthruGet(query: Record<string, unknown>) {
+  async handlePassthruGet(query: Record<string, unknown>) {
     const callSid = query.CallSid ? String(query.CallSid) : undefined;
+
+    if (callSid) {
+      const call = await webhooksRepository.findCallByExotelSid(callSid);
+      if (call) {
+        const escalate = await isEscalationRequested(call.id);
+        if (escalate) {
+          return {
+            action: 'escalate',
+            escalate: true,
+            callSid,
+            callId: call.id,
+            message: 'Escalation requested during AI conversation',
+          };
+        }
+      }
+    }
 
     return {
       action: 'continue',

@@ -5,13 +5,16 @@ import pino from 'pino';
 import { env } from '../config/env';
 import { prisma } from '../config/database';
 import { closeRedis } from '../config/redis';
+import { resolveAgentConfig } from './agent-config';
 import { ExotelProtocolError, parseExotelFrame } from './exotel-protocol';
 import {
   buildCampaignPrompt,
   createRagRetriever,
   createTranscriptWriter,
 } from './call-context';
+import { ConversationStore } from './conversation-store';
 import { ConversationOrchestrator } from './orchestrator/conversation-orchestrator';
+import { DtmfHandler } from './orchestrator/dtmf-handler';
 import { DeepgramSttAdapter } from './adapters/stt/deepgram.adapter';
 import { OpenAiLlmAdapter } from './adapters/llm/openai.adapter';
 import { OpenAiTtsAdapter } from './adapters/tts/openai.adapter';
@@ -38,21 +41,16 @@ function parseSampleRate(raw: string | number | undefined): number {
 }
 
 function resolveGreeting(
-  greetingScript: unknown,
+  greetingScript: Record<string, string>,
   language = 'en',
 ): string {
-  if (!greetingScript || typeof greetingScript !== 'object') {
-    return DEFAULT_GREETING;
-  }
-
-  const scripts = greetingScript as Record<string, unknown>;
-  const localized = scripts[language];
-  if (typeof localized === 'string' && localized.trim()) {
+  const localized = greetingScript[language];
+  if (localized?.trim()) {
     return localized;
   }
 
-  const fallback = scripts.en;
-  if (typeof fallback === 'string' && fallback.trim()) {
+  const fallback = greetingScript.en;
+  if (fallback?.trim()) {
     return fallback;
   }
 
@@ -81,14 +79,34 @@ async function resolveCallContext(customParameters: Record<string, string> | und
     return null;
   }
 
+  const agentConfig = resolveAgentConfig(call.aiAgent);
   const knowledgeBaseId = call.campaign?.knowledgeBaseId ?? null;
   const kbLanguage = call.campaign?.knowledgeBase?.defaultLanguage;
+
+  const dtmfMenu = agentConfig.toolsConfig.dtmfMenu;
+  const dtmfHandler =
+    dtmfMenu?.enabled && dtmfMenu.options
+      ? new DtmfHandler({
+          enabled: true,
+          prompt: dtmfMenu.prompt,
+          options: Object.fromEntries(
+            Object.entries(dtmfMenu.options).map(([digit, option]) => [
+              digit,
+              {
+                label: option.label,
+                action: option.action ?? 'respond',
+                response: option.response,
+              },
+            ]),
+          ),
+        })
+      : null;
 
   return {
     callId: call.id,
     organizationId: call.organizationId,
     systemPrompt: call.aiAgent.personalityPrompt,
-    greeting: resolveGreeting(call.aiAgent.greetingScript),
+    greeting: resolveGreeting(agentConfig.greetingScript),
     sampleRate: DEFAULT_SAMPLE_RATE,
     knowledgeBaseId,
     kbLanguage,
@@ -98,6 +116,8 @@ async function resolveCallContext(customParameters: Record<string, string> | und
           description: call.campaign.description,
         })
       : undefined,
+    agentConfig,
+    dtmfHandler,
   };
 }
 
@@ -113,12 +133,16 @@ function createOrchestrator(
     knowledgeBaseId?: string | null;
     kbLanguage?: string;
     campaignPrompt?: string;
+    agentConfig?: ReturnType<typeof resolveAgentConfig>;
+    dtmfHandler?: DtmfHandler | null;
   },
 ): ConversationOrchestrator {
   const ragRetriever =
     params.knowledgeBaseId && params.organizationId
       ? createRagRetriever(params.knowledgeBaseId, params.organizationId, params.kbLanguage)
       : undefined;
+
+  const agentConfig = params.agentConfig;
 
   return new ConversationOrchestrator(socket, {
     callId: params.callId,
@@ -129,8 +153,15 @@ function createOrchestrator(
     campaignPrompt: params.campaignPrompt,
     ragRetriever,
     transcriptWriter: createTranscriptWriter(params.callId),
+    interruptionEnabled: agentConfig?.interruptionEnabled ?? true,
+    maxSilenceSeconds: agentConfig?.maxSilenceSeconds ?? 15,
+    voiceProfile: agentConfig?.voiceProfile,
+    llmConfig: agentConfig?.llmConfig,
+    leadQualificationEnabled: agentConfig?.toolsConfig.leadQualification === true,
+    dtmfHandler: params.dtmfHandler ?? undefined,
+    conversationStore: new ConversationStore(params.callId),
     stt: new DeepgramSttAdapter(),
-    llm: new OpenAiLlmAdapter(),
+    llm: new OpenAiLlmAdapter({ model: agentConfig?.llmConfig.model }),
     tts: new OpenAiTtsAdapter(),
   });
 }
@@ -211,6 +242,8 @@ async function handleMessage(socket: WebSocket, raw: WebSocket.RawData): Promise
       knowledgeBaseId: callContext?.knowledgeBaseId,
       kbLanguage: callContext?.kbLanguage,
       campaignPrompt: callContext?.campaignPrompt,
+      agentConfig: callContext?.agentConfig,
+      dtmfHandler: callContext?.dtmfHandler ?? null,
     });
 
     session = { orchestrator, streamSid };

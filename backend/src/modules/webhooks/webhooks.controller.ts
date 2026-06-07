@@ -10,7 +10,7 @@ export class WebhooksController {
   });
 
   exotelPassthruGet = asyncHandler(async (req: Request, res: Response) => {
-    const result = webhooksService.handlePassthruGet(
+    const result = await webhooksService.handlePassthruGet(
       req.query as Record<string, unknown>,
     );
     sendSuccess(res, result);

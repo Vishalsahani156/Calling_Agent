@@ -1,4 +1,4 @@
-import { CallStatus, Prisma, TranscriptSpeaker } from '@prisma/client';
+import { CallDisposition, CallStatus, Prisma, TranscriptSpeaker } from '@prisma/client';
 import { prisma } from '../../config/database';
 
 const callInclude = {
@@ -137,6 +137,40 @@ export class CallsRepository {
         language: data.language,
         confidence: data.confidence,
       },
+    });
+  }
+
+  upsertConversationMemory(callId: string, key: string, value: unknown) {
+    return prisma.conversationMemory.upsert({
+      where: { callId_key: { callId, key } },
+      create: {
+        callId,
+        key,
+        value: value as Prisma.InputJsonValue,
+      },
+      update: {
+        value: value as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  getConversationMemory(callId: string, key: string) {
+    return prisma.conversationMemory.findUnique({
+      where: { callId_key: { callId, key } },
+    });
+  }
+
+  updateCallFields(
+    callId: string,
+    data: {
+      languageDetected?: string;
+      leadQualified?: boolean;
+      disposition?: CallDisposition;
+    },
+  ) {
+    return prisma.call.update({
+      where: { id: callId },
+      data,
     });
   }
 }

@@ -4,7 +4,9 @@ import type {
   ConversationMessage,
   LlmAdapter,
   LlmCompletionOptions,
+  LlmCompletionResult,
 } from '../../orchestrator/conversation-orchestrator';
+import { LEAD_QUALIFICATION_TOOLS } from '../../lead-qualification';
 
 export interface OpenAiLlmConfig {
   model?: string;
@@ -46,5 +48,48 @@ export class OpenAiLlmAdapter implements LlmAdapter {
     }
 
     return content;
+  }
+
+  async completeWithTools(
+    messages: ConversationMessage[],
+    options: LlmCompletionOptions = {},
+  ): Promise<LlmCompletionResult> {
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      temperature: options.temperature ?? 0.7,
+      max_tokens: options.maxTokens ?? 300,
+      tools: LEAD_QUALIFICATION_TOOLS,
+      tool_choice: 'auto',
+      messages: messages.map((message) => ({
+        role: message.role,
+        content: message.content,
+      })),
+    });
+
+    const choice = response.choices[0]?.message;
+    const toolCalls = (choice?.tool_calls ?? []).flatMap((toolCall) => {
+      if (toolCall.type !== 'function') {
+        return [];
+      }
+
+      let parsedArgs: Record<string, unknown> = {};
+      try {
+        parsedArgs = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
+      } catch {
+        parsedArgs = {};
+      }
+
+      return [
+        {
+          name: toolCall.function.name,
+          arguments: parsedArgs,
+        },
+      ];
+    });
+
+    return {
+      text: choice?.content?.trim() ?? '',
+      toolCalls,
+    };
   }
 }

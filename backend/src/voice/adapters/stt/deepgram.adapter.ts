@@ -18,7 +18,12 @@ interface DeepgramTranscriptMessage {
   channel?: {
     alternatives?: Array<{
       transcript?: string;
+      languages?: string[];
     }>;
+    detected_language?: string;
+  };
+  metadata?: {
+    detected_language?: string;
   };
   is_final?: boolean;
   speech_final?: boolean;
@@ -62,6 +67,8 @@ export class DeepgramSttAdapter implements SttAdapter {
 
     if (config.language) {
       params.set('language', config.language);
+    } else {
+      params.set('detect_language', 'true');
     }
 
     const url = `wss://api.deepgram.com/v1/listen?${params.toString()}`;
@@ -102,6 +109,17 @@ export class DeepgramSttAdapter implements SttAdapter {
 
   onTranscript(handler: (result: SttPartialResult) => void): void {
     this.transcriptHandler = handler;
+  }
+
+  async updateLanguage(language: string): Promise<void> {
+    if (!this.sessionConfig) {
+      return;
+    }
+
+    await this.start({
+      ...this.sessionConfig,
+      language,
+    });
   }
 
   async stop(): Promise<void> {
@@ -146,9 +164,15 @@ export class DeepgramSttAdapter implements SttAdapter {
       return;
     }
 
+    const detectedLanguage =
+      payload.metadata?.detected_language ??
+      payload.channel?.detected_language ??
+      payload.channel?.alternatives?.[0]?.languages?.[0];
+
     this.transcriptHandler({
       text,
       isFinal: Boolean(payload.is_final || payload.speech_final),
+      detectedLanguage: detectedLanguage?.trim() || undefined,
     });
   }
 }
