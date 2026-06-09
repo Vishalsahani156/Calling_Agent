@@ -50,6 +50,7 @@ export const queryKeys = {
       [...queryKeys.calls.detail(id), 'transcript'] as const,
     recording: (id: string): QueryKey =>
       [...queryKeys.calls.detail(id), 'recording'] as const,
+    live: (): QueryKey => [...queryKeys.calls.all, 'live'] as const,
   },
 
   agents: {
