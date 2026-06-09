@@ -50,6 +50,7 @@ export const queryKeys = {
       [...queryKeys.calls.detail(id), 'transcript'] as const,
     recording: (id: string): QueryKey =>
       [...queryKeys.calls.detail(id), 'recording'] as const,
+    live: (): QueryKey => [...queryKeys.calls.all, 'live'] as const,
   },
 
   agents: {
@@ -80,8 +81,8 @@ export const queryKeys = {
     all: featureRoot('analytics'),
     overview: (filters: ListFilters = {}): QueryKey =>
       [...queryKeys.analytics.all, 'overview', filters] as const,
-    campaigns: (filters: ListFilters = {}): QueryKey =>
-      [...queryKeys.analytics.all, 'campaigns', filters] as const,
+    campaign: (id: string): QueryKey =>
+      [...queryKeys.analytics.all, 'campaign', id] as const,
     calls: (filters: ListFilters = {}): QueryKey =>
       [...queryKeys.analytics.all, 'calls', filters] as const,
   },

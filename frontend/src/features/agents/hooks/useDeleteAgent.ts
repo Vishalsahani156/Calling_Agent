@@ -12,8 +12,9 @@ export function useDeleteAgent() {
 
   return useMutation({
     mutationFn: (id: string) => deleteAgent(id),
-    onSuccess: (data) => {
+    onSuccess: (data, id) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.lists() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(id) });
       toast.success(data.message);
     },
     onError: (error) => {
