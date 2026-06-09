@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 
 import { AUTH_SESSION_COOKIE } from '@/lib/constants';
 
-const AUTH_ROUTES = ['/login', '/register', '/forgot-password'] as const;
+const AUTH_ROUTES = ['/login', '/register', '/forgot-password', '/reset-password'] as const;
 
 const DASHBOARD_ROUTES = [
   '/',
@@ -57,6 +57,7 @@ export const config = {
     '/login/:path*',
     '/register/:path*',
     '/forgot-password/:path*',
+    '/reset-password/:path*',
     '/campaigns/:path*',
     '/contacts/:path*',
     '/calls/:path*',
