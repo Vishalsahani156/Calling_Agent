@@ -34,6 +34,8 @@ export const queryKeys = {
     detail: (id: string): QueryKey => [...queryKeys.contacts.details(), id] as const,
     tags: (): QueryKey => [...queryKeys.contacts.all, 'tags'] as const,
     groups: (): QueryKey => [...queryKeys.contacts.all, 'groups'] as const,
+    groupsList: (filters: ListFilters = {}): QueryKey =>
+      [...queryKeys.contacts.groups(), 'list', filters] as const,
     group: (id: string): QueryKey => [...queryKeys.contacts.groups(), id] as const,
   },
 
