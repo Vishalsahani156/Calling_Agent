@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import { getMe } from '@/features/auth/api/auth.api';
 import { AUTH_SESSION_COOKIE } from '@/lib/constants';
@@ -13,9 +13,7 @@ function hasAuthSession(): boolean {
 }
 
 export function useAuth() {
-  const queryClient = useQueryClient();
-
-  const { data: user, isLoading, isError, error, refetch } = useQuery({
+  const { data: user, isLoading, isError } = useQuery({
     queryKey: queryKeys.auth.me(),
     queryFn: getMe,
     enabled: !!getAccessToken() || hasAuthSession(),
@@ -25,17 +23,8 @@ export function useAuth() {
 
   return {
     user: user ?? null,
-    isAuthenticated: !!user,
     isLoading,
+    isAuthenticated: !!user,
     isError,
-    error,
-    refetch,
-    invalidate: () => queryClient.invalidateQueries({ queryKey: queryKeys.auth.me() }),
-    setUser: (nextUser: NonNullable<typeof user>) => {
-      queryClient.setQueryData(queryKeys.auth.me(), nextUser);
-    },
-    clearUser: () => {
-      queryClient.removeQueries({ queryKey: queryKeys.auth.me() });
-    },
   };
 }

@@ -86,9 +86,7 @@ export const queryKeys = {
 
   settings: {
     all: featureRoot('settings'),
-    organization: (): QueryKey => [...queryKeys.settings.all, 'organization'] as const,
-    telephony: (): QueryKey => [...queryKeys.settings.all, 'telephony'] as const,
-    integrations: (): QueryKey => [...queryKeys.settings.all, 'integrations'] as const,
+    current: (): QueryKey => [...queryKeys.settings.all, 'current'] as const,
   },
 
   users: {
