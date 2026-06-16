@@ -11,9 +11,15 @@ export const createCampaignSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(5000).optional(),
   aiAgentId: z.string().uuid(),
-  knowledgeBaseId: z.string().uuid().optional(),
+  knowledgeBaseId: z.preprocess(
+    (value) => (value === '' || value === null || value === undefined ? undefined : value),
+    z.string().uuid().optional(),
+  ),
   callerPhone: z.string().min(10).max(20),
-  exotelFlowUrl: z.string().url().max(1000).optional(),
+  exotelFlowUrl: z.preprocess(
+    (value) => (value === '' || value === null || value === undefined ? undefined : value),
+    z.string().url().max(1000).optional(),
+  ),
   scheduleStart: z.string().datetime().optional(),
   scheduleEnd: z.string().datetime().optional(),
   timezone: z.string().max(50).optional(),
