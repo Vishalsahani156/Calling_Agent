@@ -15,6 +15,7 @@ import {
 import { callCompletionService } from '../modules/calls/call-completion.service';
 import { ConversationStore } from './conversation-store';
 import { ConversationOrchestrator } from './orchestrator/conversation-orchestrator';
+import { DtmfHandler } from './orchestrator/dtmf-handler';
 import { resolveCallIdFromCustomParameters } from './resolve-call-id';
 import { DeepgramSttAdapter } from './adapters/stt/deepgram.adapter';
 import { OpenAiLlmAdapter } from './adapters/llm/openai.adapter';

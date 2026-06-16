@@ -110,7 +110,7 @@ async function processDialJob(job: Job<CampaignDialerJobData>): Promise<{ action
   const flowUrl = resolveExotelFlowUrl(campaign.exotelFlowUrl);
   const callerId = resolveExotelCallerId(campaign.callerPhone);
 
-  if (!isExotelConfigured() || !flowUrl) {
+  if (!isExotelConfigured() || !flowUrl || !callerId) {
     logger.warn({ callId: call.id }, 'Exotel not configured; call record created without dial');
 
     await prisma.$transaction([

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Eye, Loader2, Pause, Play, Plus, Search, Square } from 'lucide-react';
+import { Eye, Pause, Play, Plus, Search, Square } from 'lucide-react';
 
 import { TablePagination } from '@/components/shared/table-pagination';
 import { Badge } from '@/components/ui/badge';
@@ -21,17 +21,21 @@ import { CampaignFormDialog } from '@/features/campaigns/components/CampaignForm
 import { useCampaignAction } from '@/features/campaigns/hooks/useCampaignAction';
 import { useCampaigns } from '@/features/campaigns/hooks/useCampaigns';
 import type { CampaignStatus } from '@/features/campaigns/types';
-import { cn } from '@/lib/utils';
 
-function statusVariant(status: CampaignStatus): 'default' | 'secondary' | 'destructive' | 'outline' {
+function statusVariant(
+  status: CampaignStatus,
+): 'default' | 'secondary' | 'failed' | 'outline' | 'completed' | 'running' | 'paused' | 'draft' {
   switch (status) {
     case 'running':
-      return 'default';
+      return 'running';
     case 'paused':
-      return 'secondary';
+      return 'paused';
     case 'stopped':
     case 'completed':
-      return 'outline';
+      return 'completed';
+    case 'draft':
+    case 'scheduled':
+      return 'draft';
     default:
       return 'secondary';
   }

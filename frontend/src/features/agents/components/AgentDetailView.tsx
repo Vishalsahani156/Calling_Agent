@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AgentFormDialog } from '@/features/agents/components/AgentFormDialog';
 import { TestAgentPanel } from '@/features/agents/components/TestAgentPanel';
+import { TestVoiceCallPanel } from '@/features/calls/components/TestVoiceCallPanel';
 import { useAgent } from '@/features/agents/hooks/useAgent';
 import { stringifyJson } from '@/features/agents/utils/json';
 
@@ -17,9 +18,10 @@ interface AgentDetailViewProps {
   agentId: string;
   canWrite: boolean;
   canTest: boolean;
+  canCall: boolean;
 }
 
-export function AgentDetailView({ agentId, canWrite, canTest }: AgentDetailViewProps) {
+export function AgentDetailView({ agentId, canWrite, canTest, canCall }: AgentDetailViewProps) {
   const [editOpen, setEditOpen] = useState(false);
   const { data: agent, isLoading, isError } = useAgent(agentId);
 
@@ -108,6 +110,8 @@ export function AgentDetailView({ agentId, canWrite, canTest }: AgentDetailViewP
 
         <TestAgentPanel agentId={agentId} canTest={canTest} />
       </div>
+
+      <TestVoiceCallPanel agentId={agentId} agentName={agent.name} canCall={canCall} />
 
       <AgentFormDialog
         agent={agent}
