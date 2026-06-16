@@ -15,7 +15,7 @@ import {
 import { callCompletionService } from '../modules/calls/call-completion.service';
 import { ConversationStore } from './conversation-store';
 import { ConversationOrchestrator } from './orchestrator/conversation-orchestrator';
-import { DtmfHandler } from './orchestrator/dtmf-handler';
+import { resolveCallIdFromCustomParameters } from './resolve-call-id';
 import { DeepgramSttAdapter } from './adapters/stt/deepgram.adapter';
 import { OpenAiLlmAdapter } from './adapters/llm/openai.adapter';
 import { OpenAiTtsAdapter } from './adapters/tts/openai.adapter';
@@ -64,7 +64,7 @@ function resolveGreeting(
 }
 
 async function resolveCallContext(customParameters: Record<string, string> | undefined) {
-  const callId = customParameters?.callId ?? customParameters?.call_id;
+  const callId = resolveCallIdFromCustomParameters(customParameters);
   if (!callId) {
     return null;
   }

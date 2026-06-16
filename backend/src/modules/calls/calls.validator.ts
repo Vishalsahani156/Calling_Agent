@@ -22,3 +22,8 @@ export const listCallsQuerySchema = z.object({
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
 });
+
+export const testCallSchema = z.object({
+  phone: z.string().min(10).max(20),
+  aiAgentId: z.string().uuid(),
+});

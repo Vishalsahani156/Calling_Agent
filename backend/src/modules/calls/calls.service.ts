@@ -1,7 +1,16 @@
 import { CallStatus } from '@prisma/client';
+import { env } from '../../config/env';
+import { prisma } from '../../config/database';
 import { callsRepository } from './calls.repository';
-import { NotFoundError } from '../../shared/errors/app.error';
+import { BadRequestError, NotFoundError } from '../../shared/errors/app.error';
 import { getPagination, buildPaginatedMeta } from '../../shared/utils/response';
+import { eventBus, AppEvents } from '../../events/event-bus';
+import {
+  initiateExotelCall,
+  isExotelConfigured,
+  resolveExotelCallerId,
+  resolveExotelFlowUrl,
+} from '../telephony/exotel.service';
 
 function formatCallSummary(call: {
   id: string;
@@ -147,6 +156,77 @@ export class CallsService {
       count: calls.length,
       calls: calls.map(formatCallSummary),
     };
+  }
+
+  async placeTestCall(
+    organizationId: string,
+    input: { phone: string; aiAgentId: string },
+  ) {
+    const agent = await prisma.aiAgent.findFirst({
+      where: { id: input.aiAgentId, organizationId },
+      select: { id: true, name: true },
+    });
+
+    if (!agent) {
+      throw new NotFoundError('Agent not found');
+    }
+
+    const flowUrl = resolveExotelFlowUrl();
+    const callerId = resolveExotelCallerId();
+
+    if (!isExotelConfigured() || !flowUrl || !callerId) {
+      throw new BadRequestError(
+        'Exotel is not configured. Set EXOTEL_CALLER_ID and EXOTEL_FLOW_URL in environment or settings.',
+      );
+    }
+
+    const call = await prisma.call.create({
+      data: {
+        organizationId,
+        aiAgentId: input.aiAgentId,
+        direction: 'outbound',
+        status: 'initiated',
+        startedAt: new Date(),
+      },
+    });
+
+    eventBus.emit(AppEvents.CALL_INITIATED, {
+      callId: call.id,
+      organizationId,
+    });
+
+    try {
+      const exotelCallSid = await initiateExotelCall({
+        toPhone: input.phone,
+        callerId,
+        flowUrl,
+        customField: call.id,
+        statusCallback: `${env.API_BASE_URL}/api/v1/webhooks/exotel/status`,
+      });
+
+      const updated = await prisma.call.update({
+        where: { id: call.id },
+        data: {
+          exotelCallSid,
+          status: 'ringing',
+        },
+      });
+
+      return {
+        callId: updated.id,
+        exotelCallSid,
+        status: updated.status,
+        agent: agent.name,
+        phone: input.phone,
+        message: 'Test call initiated. Answer your phone to speak with the agent.',
+      };
+    } catch (error) {
+      await prisma.call.update({
+        where: { id: call.id },
+        data: { status: 'failed', endedAt: new Date() },
+      });
+      throw error;
+    }
   }
 }
 

@@ -3,7 +3,7 @@ import { callsController } from './calls.controller';
 import { authenticate } from '../../middleware/auth';
 import { requirePermission } from '../../middleware/rbac';
 import { validate } from '../../middleware/validate';
-import { callIdParamSchema, listCallsQuerySchema } from './calls.validator';
+import { callIdParamSchema, listCallsQuerySchema, testCallSchema } from './calls.validator';
 
 const router = Router();
 
@@ -17,6 +17,13 @@ router.get(
 );
 
 router.get('/live', requirePermission('calls', 'read'), callsController.getLive);
+
+router.post(
+  '/test',
+  requirePermission('calls', 'write'),
+  validate({ body: testCallSchema }),
+  callsController.placeTestCall,
+);
 
 router.get(
   '/:id',

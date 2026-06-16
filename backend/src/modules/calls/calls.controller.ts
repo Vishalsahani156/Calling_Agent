@@ -31,6 +31,11 @@ export class CallsController {
     const result = await callsService.getRecording(req.params.id, req.user!.organizationId);
     sendSuccess(res, result);
   });
+
+  placeTestCall = asyncHandler(async (req: Request, res: Response) => {
+    const result = await callsService.placeTestCall(req.user!.organizationId, req.body);
+    sendSuccess(res, result, 202);
+  });
 }
 
 export const callsController = new CallsController();

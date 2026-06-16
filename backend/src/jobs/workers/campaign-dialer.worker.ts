@@ -6,72 +6,18 @@ import { prisma } from '../../config/database';
 import { eventBus, AppEvents } from '../../events/event-bus';
 import { scheduleCampaignContactRetry } from '../../modules/campaigns/call-retry.service';
 import {
+  initiateExotelCall,
+  isExotelConfigured,
+  resolveExotelCallerId,
+  resolveExotelFlowUrl,
+} from '../../modules/telephony/exotel.service';
+import {
   QUEUE_NAMES,
   enqueueCampaignDial,
   type CampaignDialerJobData,
 } from '../queues';
 
 const logger = pino({ name: 'campaign-dialer-worker' });
-
-interface ExotelConnectResponse {
-  Call?: {
-    Sid?: string;
-    Status?: string;
-  };
-}
-
-function isExotelConfigured(): boolean {
-  return Boolean(
-    env.EXOTEL_ACCOUNT_SID &&
-      env.EXOTEL_API_KEY &&
-      env.EXOTEL_API_TOKEN &&
-      env.EXOTEL_CALLER_ID,
-  );
-}
-
-async function initiateExotelCall(params: {
-  toPhone: string;
-  callerId: string;
-  flowUrl: string;
-  customField: string;
-  statusCallback?: string;
-}): Promise<string> {
-  const url = `https://${env.EXOTEL_API_KEY}:${env.EXOTEL_API_TOKEN}@api.exotel.com/v1/Accounts/${env.EXOTEL_ACCOUNT_SID}/Calls/connect.json`;
-
-  const body = new URLSearchParams({
-    From: params.toPhone,
-    CallerId: params.callerId,
-    Url: params.flowUrl,
-    CallType: 'trans',
-    CustomField: params.customField,
-  });
-
-  if (params.statusCallback) {
-    body.set('StatusCallback', params.statusCallback);
-    body.set('StatusCallbackEvents[0]', 'terminal');
-    body.set('StatusCallbackEvents[1]', 'answered');
-  }
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: body.toString(),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Exotel API error (${response.status}): ${errorText}`);
-  }
-
-  const payload = (await response.json()) as ExotelConnectResponse;
-  const callSid = payload.Call?.Sid;
-
-  if (!callSid) {
-    throw new Error('Exotel API response missing Call.Sid');
-  }
-
-  return callSid;
-}
 
 async function countActiveCalls(campaignId: string): Promise<number> {
   return prisma.call.count({
@@ -161,8 +107,8 @@ async function processDialJob(job: Job<CampaignDialerJobData>): Promise<{ action
     campaignId,
   });
 
-  const flowUrl = campaign.exotelFlowUrl ?? env.EXOTEL_FLOW_URL;
-  const callerId = campaign.callerPhone || env.EXOTEL_CALLER_ID!;
+  const flowUrl = resolveExotelFlowUrl(campaign.exotelFlowUrl);
+  const callerId = resolveExotelCallerId(campaign.callerPhone);
 
   if (!isExotelConfigured() || !flowUrl) {
     logger.warn({ callId: call.id }, 'Exotel not configured; call record created without dial');
