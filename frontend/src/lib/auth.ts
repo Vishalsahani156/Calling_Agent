@@ -30,6 +30,10 @@ export function clearAccessToken(): void {
   clearSessionCookie();
 }
 
+export function isSuperAdmin(user: Pick<AuthUser, 'role'> | null | undefined): boolean {
+  return user?.role.name === 'super_admin';
+}
+
 export function hasPermission(
   permissions: string[],
   permission: `${string}:${string}`,

@@ -1,10 +1,11 @@
+import { RoleName } from '@prisma/client';
 import { prisma } from '../../config/database';
+import { ASSIGNABLE_ROLE_NAMES } from '../../shared/constants/platform';
 
 export class UsersRepository {
-  findMany(organizationId: string, skip: number, limit: number, search?: string) {
+  findMany(skip: number, limit: number, search?: string) {
     return prisma.user.findMany({
       where: {
-        organizationId,
         deletedAt: null,
         ...(search
           ? {
@@ -16,17 +17,16 @@ export class UsersRepository {
             }
           : {}),
       },
-      include: { role: true },
+      include: { role: true, organization: true },
       skip,
       take: limit,
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  count(organizationId: string, search?: string) {
+  count(search?: string) {
     return prisma.user.count({
       where: {
-        organizationId,
         deletedAt: null,
         ...(search
           ? {
@@ -41,15 +41,19 @@ export class UsersRepository {
     });
   }
 
-  findById(id: string, organizationId: string) {
+  findById(id: string) {
     return prisma.user.findFirst({
-      where: { id, organizationId, deletedAt: null },
-      include: { role: true },
+      where: { id, deletedAt: null },
+      include: { role: true, organization: true },
     });
   }
 
   findByEmail(email: string) {
     return prisma.user.findFirst({ where: { email, deletedAt: null } });
+  }
+
+  findRoleById(id: string) {
+    return prisma.role.findUnique({ where: { id } });
   }
 
   create(data: {
@@ -63,27 +67,42 @@ export class UsersRepository {
   }) {
     return prisma.user.create({
       data,
-      include: { role: true },
+      include: { role: true, organization: true },
     });
   }
 
-  update(id: string, organizationId: string, data: Record<string, unknown>) {
+  update(id: string, data: Record<string, unknown>) {
     return prisma.user.update({
-      where: { id, organizationId },
+      where: { id },
       data,
-      include: { role: true },
+      include: { role: true, organization: true },
     });
   }
 
-  softDelete(id: string, organizationId: string) {
+  softDelete(id: string) {
     return prisma.user.update({
-      where: { id, organizationId },
+      where: { id },
       data: { deletedAt: new Date(), isActive: false },
     });
   }
 
-  listRoles() {
-    return prisma.role.findMany({ orderBy: { name: 'asc' } });
+  listRoles(assignableOnly = false) {
+    return prisma.role.findMany({
+      where: assignableOnly
+        ? { name: { in: [...ASSIGNABLE_ROLE_NAMES] } }
+        : undefined,
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  countSuperAdmins(excludeUserId?: string) {
+    return prisma.user.count({
+      where: {
+        deletedAt: null,
+        role: { name: RoleName.super_admin },
+        ...(excludeUserId ? { id: { not: excludeUserId } } : {}),
+      },
+    });
   }
 
   listPermissions() {

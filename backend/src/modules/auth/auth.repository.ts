@@ -24,6 +24,30 @@ export class AuthRepository {
     return prisma.organization.findUnique({ where: { slug } });
   }
 
+  createUserInOrganization(data: {
+    organizationId: string;
+    email: string;
+    passwordHash: string;
+    firstName: string;
+    lastName: string;
+    phone?: string;
+    roleId: string;
+  }) {
+    return prisma.user.create({
+      data: {
+        email: data.email,
+        passwordHash: data.passwordHash,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        phone: data.phone,
+        organizationId: data.organizationId,
+        roleId: data.roleId,
+        emailVerifiedAt: new Date(),
+      },
+      include: { role: true, organization: true },
+    });
+  }
+
   createOrganizationWithUser(data: {
     orgName: string;
     slug: string;

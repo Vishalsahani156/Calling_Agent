@@ -41,8 +41,10 @@ export async function deleteUser(id: string): Promise<{ message: string }> {
   return apiDelete<{ message: string }>(`/users/${id}`);
 }
 
-export async function fetchRoles(): Promise<Role[]> {
-  return apiGet<Role[]>('/users/roles');
+export async function fetchRoles(assignableOnly = false): Promise<Role[]> {
+  return apiGet<Role[]>('/users/roles', {
+    params: assignableOnly ? { assignable: 'true' } : undefined,
+  });
 }
 
 export async function fetchPermissions(): Promise<Permission[]> {

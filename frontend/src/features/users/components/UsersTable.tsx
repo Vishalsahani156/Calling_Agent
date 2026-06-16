@@ -29,7 +29,7 @@ import { EditUserDialog } from '@/features/users/components/EditUserDialog';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useDeleteUser } from '@/features/users/hooks/useDeleteUser';
 import { useUsers } from '@/features/users/hooks/useUsers';
-import { hasPermission } from '@/lib/auth';
+import { isSuperAdmin } from '@/lib/auth';
 import type { UserListItem } from '@/features/users/types';
 
 function formatRoleName(name: string): string {
@@ -54,9 +54,10 @@ export function UsersTable() {
 
   const deleteMutation = useDeleteUser();
 
-  const canCreate = currentUser ? hasPermission(currentUser.permissions, 'users:write') : false;
-  const canUpdate = canCreate;
-  const canDelete = currentUser ? hasPermission(currentUser.permissions, 'users:delete') : false;
+  const isSuperAdminUser = isSuperAdmin(currentUser);
+  const canCreate = isSuperAdminUser;
+  const canUpdate = isSuperAdminUser;
+  const canDelete = isSuperAdminUser;
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -147,7 +148,7 @@ export function UsersTable() {
                     <div className="flex justify-end gap-1">
                       {(canUpdate || canDelete) && (
                         <>
-                          {canUpdate ? (
+                          {canUpdate && user.role.name !== 'super_admin' ? (
                             <Button
                               variant="ghost"
                               size="icon"
@@ -157,7 +158,7 @@ export function UsersTable() {
                               <Pencil className="h-4 w-4" />
                             </Button>
                           ) : null}
-                          {canDelete && user.id !== currentUser?.id ? (
+                          {canDelete && user.id !== currentUser?.id && user.role.name !== 'super_admin' ? (
                             <Button
                               variant="ghost"
                               size="icon"

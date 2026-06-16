@@ -38,7 +38,7 @@ interface CreateUserDialogProps {
 
 export function CreateUserDialog({ canCreate }: CreateUserDialogProps) {
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<Mode>('invite');
+  const [mode, setMode] = useState<Mode>('create');
   const createMutation = useCreateUser();
   const inviteMutation = useInviteUser();
 
@@ -70,7 +70,7 @@ export function CreateUserDialog({ canCreate }: CreateUserDialogProps) {
   function resetForms() {
     createForm.reset();
     inviteForm.reset();
-    setMode('invite');
+    setMode('create');
   }
 
   function handleOpenChange(next: boolean) {
@@ -112,7 +112,7 @@ export function CreateUserDialog({ canCreate }: CreateUserDialogProps) {
         <DialogHeader>
           <DialogTitle>Add team member</DialogTitle>
           <DialogDescription>
-            Invite by email or create an account with a password.
+            Create a user with email and password, then assign admin, manager, agent, or viewer role.
           </DialogDescription>
         </DialogHeader>
 

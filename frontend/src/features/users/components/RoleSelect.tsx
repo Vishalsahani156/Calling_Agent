@@ -14,10 +14,11 @@ interface RoleSelectProps {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  assignableOnly?: boolean;
 }
 
-export function RoleSelect({ value, onChange, disabled }: RoleSelectProps) {
-  const { data: roles, isLoading } = useRoles();
+export function RoleSelect({ value, onChange, disabled, assignableOnly = true }: RoleSelectProps) {
+  const { data: roles, isLoading } = useRoles(assignableOnly);
 
   if (isLoading) {
     return <Skeleton className="h-9 w-full" />;

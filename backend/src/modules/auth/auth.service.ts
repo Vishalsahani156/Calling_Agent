@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { Response } from 'express';
 import { RoleName } from '@prisma/client';
 import { env } from '../../config/env';
+import { PLATFORM_ORG_SLUG } from '../../shared/constants/platform';
 import { authRepository } from './auth.repository';
 import {
   RegisterInput,
@@ -16,7 +17,7 @@ import {
   UnauthorizedError,
   NotFoundError,
 } from '../../shared/errors/app.error';
-import { hashToken, generateToken, slugify } from '../../shared/utils/crypto.util';
+import { hashToken, generateToken } from '../../shared/utils/crypto.util';
 import { emailService } from '../../shared/services/email.service';
 import { JwtAccessPayload, JwtRefreshPayload } from '../../types/jwt';
 import { eventBus, AppEvents } from '../../events/event-bus';
@@ -113,27 +114,24 @@ export class AuthService {
     const existing = await authRepository.findUserByEmail(input.email);
     if (existing) throw new ConflictError('Email already registered');
 
-    const orgAdminRole = await authRepository.findRoleByName(RoleName.org_admin);
-    if (!orgAdminRole) throw new BadRequestError('Default role not configured. Run database seed.');
-
-    let slug = slugify(input.organizationName);
-    let suffix = 0;
-    while (await authRepository.findOrganizationBySlug(slug)) {
-      suffix += 1;
-      slug = `${slugify(input.organizationName)}-${suffix}`;
+    const platformOrg = await authRepository.findOrganizationBySlug(PLATFORM_ORG_SLUG);
+    if (!platformOrg) {
+      throw new BadRequestError('Platform is not configured. Run database seed.');
     }
+
+    const defaultRole = await authRepository.findRoleByName(RoleName.agent);
+    if (!defaultRole) throw new BadRequestError('Default role not configured. Run database seed.');
 
     const passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
 
-    const user = await authRepository.createOrganizationWithUser({
-      orgName: input.organizationName,
-      slug,
+    const user = await authRepository.createUserInOrganization({
+      organizationId: platformOrg.id,
       email: input.email,
       passwordHash,
       firstName: input.firstName,
       lastName: input.lastName,
       phone: input.phone,
-      roleId: orgAdminRole.id,
+      roleId: defaultRole.id,
     });
 
     const permissions = (await authRepository.getUserPermissions(user.roleId)).map(

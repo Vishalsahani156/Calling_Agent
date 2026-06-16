@@ -67,6 +67,8 @@ export function EditUserDialog({ user, open, onOpenChange, canUpdate }: EditUser
 
   if (!user) return null;
 
+  const isProtectedSuperAdmin = user.role.name === 'super_admin';
+
   function onSubmit(values: UpdateUserInput) {
     updateMutation.mutate(
       {
@@ -142,7 +144,11 @@ export function EditUserDialog({ user, open, onOpenChange, canUpdate }: EditUser
                 <FormItem>
                   <FormLabel>Role</FormLabel>
                   <FormControl>
-                    <RoleSelect value={field.value ?? ''} onChange={field.onChange} disabled={!canUpdate} />
+                    <RoleSelect
+                      value={field.value ?? ''}
+                      onChange={field.onChange}
+                      disabled={!canUpdate || isProtectedSuperAdmin}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

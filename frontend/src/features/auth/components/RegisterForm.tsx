@@ -28,7 +28,6 @@ export function RegisterForm() {
       password: '',
       firstName: '',
       lastName: '',
-      organizationName: '',
       phone: '',
     },
   });
@@ -44,7 +43,7 @@ export function RegisterForm() {
   return (
     <AuthCard
       title="Create account"
-      description="Set up your organization and start running AI voice campaigns"
+      description="Register to join the platform. Your super admin can upgrade your role later."
       footer={
         <p className="text-center text-muted-foreground sm:text-left">
           Already have an account? <AuthLink href="/login">Sign in</AuthLink>
@@ -82,20 +81,6 @@ export function RegisterForm() {
               )}
             />
           </div>
-
-          <FormField
-            control={form.control}
-            name="organizationName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Organization name</FormLabel>
-                <FormControl>
-                  <Input autoComplete="organization" placeholder="Acme Inc." {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
 
           <FormField
             control={form.control}

@@ -10,7 +10,7 @@ export function UsersPageContent() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
           <p className="text-sm text-muted-foreground">
-            Manage team members, roles, and access for your organization.
+            Super admin can view all registered users, assign roles, and delete accounts.
           </p>
         </div>
         <UsersTable />

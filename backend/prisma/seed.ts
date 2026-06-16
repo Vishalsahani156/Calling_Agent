@@ -74,14 +74,11 @@ function getRolePermissions(role: RoleName): string[] {
       return all;
 
     case RoleName.org_admin:
-      return all;
+      return all.filter((key) => !key.startsWith('users:'));
 
     case RoleName.manager:
       return all.filter(
-        (key) =>
-          !key.startsWith('users:') ||
-          key === 'users:read' ||
-          key === 'settings:read',
+        (key) => !key.startsWith('users:') && key !== 'settings:write',
       );
 
     case RoleName.agent:
@@ -154,6 +151,8 @@ async function seedRolePermissions(
   roleIds: Map<RoleName, string>,
   permissionIds: Map<string, string>,
 ): Promise<void> {
+  await prisma.rolePermission.deleteMany({});
+
   for (const [roleName, roleId] of roleIds.entries()) {
     const allowed = getRolePermissions(roleName);
 
@@ -178,24 +177,13 @@ async function seedRolePermissions(
   }
 }
 
-async function seedDevData(roleIds: Map<RoleName, string>): Promise<void> {
-  const orgAdminRoleId = roleIds.get(RoleName.org_admin);
-  if (!orgAdminRoleId) {
-    throw new Error('org_admin role not found');
-  }
-
-  const email = process.env.DEV_ADMIN_EMAIL ?? 'admin@example.com';
-  const password = process.env.DEV_ADMIN_PASSWORD ?? 'ChangeMe123!';
-  const passwordHash = await bcrypt.hash(password, 12);
-
+async function seedPlatformOrganization(): Promise<void> {
   const organization = await prisma.organization.upsert({
-    where: { slug: 'demo-org' },
-    update: {
-      name: 'Demo Organization',
-    },
+    where: { slug: 'platform' },
+    update: { name: 'Platform' },
     create: {
-      name: 'Demo Organization',
-      slug: 'demo-org',
+      name: 'Platform',
+      slug: 'platform',
       plan: OrganizationPlan.starter,
       settings: {},
     },
@@ -212,30 +200,87 @@ async function seedDevData(roleIds: Map<RoleName, string>): Promise<void> {
     },
   });
 
+  console.log(`Platform organization ready: ${organization.slug}`);
+}
+
+async function seedDevData(roleIds: Map<RoleName, string>): Promise<void> {
+  const superAdminRoleId = roleIds.get(RoleName.super_admin);
+  if (!superAdminRoleId) {
+    throw new Error('super_admin role not found');
+  }
+
+  const organization = await prisma.organization.findUnique({
+    where: { slug: 'platform' },
+  });
+  if (!organization) {
+    throw new Error('platform organization not found');
+  }
+
+  const email = process.env.DEV_ADMIN_EMAIL ?? 'admin@example.com';
+  const password = process.env.DEV_ADMIN_PASSWORD ?? 'ChangeMe123!';
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  const existingSuperAdmins = await prisma.user.count({
+    where: {
+      role: { name: RoleName.super_admin },
+      deletedAt: null,
+    },
+  });
+
+  if (existingSuperAdmins > 0) {
+    const existing = await prisma.user.findFirst({
+      where: {
+        email,
+        role: { name: RoleName.super_admin },
+        deletedAt: null,
+      },
+    });
+
+    if (existing) {
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          passwordHash,
+          firstName: 'Super',
+          lastName: 'Admin',
+          organizationId: organization.id,
+          roleId: superAdminRoleId,
+          isActive: true,
+          deletedAt: null,
+        },
+      });
+      console.log(`Super admin updated: ${email}`);
+      return;
+    }
+
+    console.log('Super admin already exists; skipping duplicate super admin seed');
+    return;
+  }
+
   await prisma.user.upsert({
     where: { email },
     update: {
-      firstName: 'Demo',
+      firstName: 'Super',
       lastName: 'Admin',
       organizationId: organization.id,
-      roleId: orgAdminRoleId,
+      roleId: superAdminRoleId,
+      passwordHash,
       isActive: true,
       deletedAt: null,
     },
     create: {
       email,
       passwordHash,
-      firstName: 'Demo',
+      firstName: 'Super',
       lastName: 'Admin',
       organizationId: organization.id,
-      roleId: orgAdminRoleId,
+      roleId: superAdminRoleId,
       isActive: true,
       emailVerifiedAt: new Date(),
     },
   });
 
-  console.log(`Dev organization seeded: ${organization.slug}`);
-  console.log(`Dev admin user: ${email}`);
+  console.log(`Super admin user: ${email}`);
 }
 
 async function main(): Promise<void> {
@@ -248,8 +293,11 @@ async function main(): Promise<void> {
   console.log('Seeding role permissions...');
   await seedRolePermissions(roleIds, permissionIds);
 
+  console.log('Seeding platform organization...');
+  await seedPlatformOrganization();
+
   if (process.env.SEED_DEV_DATA === 'true') {
-    console.log('Seeding dev organization and admin user...');
+    console.log('Seeding super admin user...');
     await seedDevData(roleIds);
   }
 
